@@ -3157,6 +3157,13 @@
             isSyncing = true;
             cloudSyncBtn.disabled = true;
             const total = allImageData.length;
+
+            // 設定正確的 overlay 標題（避免殘留 syncFromCloud 的文字）
+            const _syncTi = syncOverlay ? syncOverlay.querySelector('.sync-title') : null;
+            const _syncIc = syncOverlay ? syncOverlay.querySelector('.sync-icon') : null;
+            if (_syncTi) _syncTi.textContent = '☁️ 同步至雲端...';
+            if (_syncIc) _syncIc.textContent = '☁️';
+
             showSyncProgress(0, total, '準備上傳...');
 
             try {
