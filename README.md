@@ -231,9 +231,9 @@ https://你的帳號.github.io/3d-gallery/
 ---
 
 
-## ✅ 已完成進度總表（v8.0 截止）
+## ✅ 已完成進度總表（v8.1 截止）
 
-> 最後更新：2026-03-06（v8.0 完成雲端管理完整化）
+> 最後更新：2026-03-06（v8.1 完成 3D 視覺全面升級）
 
 ---
 
@@ -301,6 +301,11 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **進度 Overlay 整合**：雲端還原 / 同步 / 刪除共用同一套動態進度框，顯示即時計數
 - [x] **同步鎖機制**：`isSyncing` 旗標防止同步中途登出導致 403 錯誤
 - [x] **更完善的錯誤處理**：各操作均有獨立的 catch 與 Banner 提示
+
+### ✨ v8.1：3D 視覺全面升級（最新）
+- [x] **多排圓圈排列**：80 張以上照片自動分成多排垂直排列，每排半徑受透視深度上限（72%）保護，徹底消滅後排反面問題
+- [x] **深度暗化效果**：`applyTransform()` 每幀依各卡片面向角動態更新 `brightness()`，前排全亮（1.0）後排漸暗（0.3），圓圈立體感大幅提升
+- [x] **🎥 沉浸模式切換**：紫色發光按鈕一鍵切換（卡片 420×600px + 透視 750px），形成環繞全景效果；退出自動還原原設定
 
 ---
 
@@ -690,6 +695,150 @@ exports.describeImage = onCall(async ({ imageBase64 }) => {
 
 ---
 
+### AS. 旋轉速度鍵盤細調 + 手勢靈敏度分設（UX 細節優化）
+
+> **難度**：⭐｜**效益**：老人 / 兒童等不同族群都能找到舒適的操作手感
+
+在版型抽屜中新增兩個 range 滑桿：
+- 🖱️ **拖曳靈敏度**（0.1 ～ 1.5 倍速，預設 0.4）
+- 📱 **觸控靈敏度**（獨立設定，手機端更精準）
+- ⌨️ **鍵盤步進角度**（預設跟著每排 theta，可獨立設為 5° / 10° / 15° / 30°）
+
+所有設定存入 `layoutCfg`，隨版型一起雲端儲存。
+
+---
+
+### AT. 卡片陰影深度動畫（Depth Shadow）
+
+> **難度**：⭐⭐｜**效益**：搭配深度暗化，圓圈 3D 感再升一級，視覺極具質感
+
+在 `applyTransform()` 深度暗化迴圈中，同步調整卡片陰影：
+
+```js
+// bright 已算好 (0.3～1.0)
+const shadowBlur = Math.round(bright * 32); // 前排陰影最強
+const shadowAlpha = (bright * 0.6).toFixed(2);
+card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+```
+
+**效果**：前排卡片投下深陰影，後排幾乎無陰影，深度層次感提升
+
+---
+
+### AU. 沉浸模式自訂預設（多組情境一鍵切換）
+
+> **難度**：⭐⭐｜**效益**：一套程式適應展覽、課堂、日常等不同使用情境
+
+```js
+const SCENE_PRESETS = {
+    '🎠 標準':   { w: 260,  h: 380,  persp: 1200, speed: 0.25 },
+    '🎥 沉浸':   { w: 420,  h: 600,  persp: 750,  speed: 0.15 },
+    '🗂️ 精選':   { w: 180,  h: 260,  persp: 1600, speed: 0.35 },  // 小卡、多張同時可見
+    '🖼️ 藝廊':   { w: 320,  h: 480,  persp: 900,  speed: 0.20 },  // 垂直相片最佳
+    '📸 橫幅':   { w: 560,  h: 315,  persp: 1400, speed: 0.12 },  // 寬屏橫幅照片
+};
+```
+
+**UI 設計**：
+- 版型抽屜頂部加入五顆情境按鈕，點擊後動態套用，0.6s 過渡動畫
+- 使用者可在情境基礎上再微調三個滑桿
+- 選取的情境名稱顯示於按鈕列（`🎥 沉浸模式中`）
+
+---
+
+### AV. 卡片自動對焦高亮（Active Center Card）
+
+> **難度**：⭐⭐｜**效益**：旋轉停止後自動識別正前方的卡片，給予視覺焦點，提升瀏覽體驗
+
+在 `applyInertia()` 停止後 + `applyTransform()` 每幀計算最靠近 0° 的卡片：
+
+```js
+// 停止慣性後，自動「對焦到最近卡片」的 snap
+function snapToNearest() {
+    const nearest = Math.round(currentRotationY / theta) * theta;
+    // 加入平滑吸附動畫
+    carousel.style.transition = 'transform 0.35s cubic-bezier(.2,.8,.2,1)';
+    currentRotationY = nearest;
+    applyTransform();
+}
+
+// 最前方卡片加入高亮亮邊
+galleryCards.forEach(card => {
+    const eff = (((+card.dataset.baseAngle + currentRotationY) % 360) + 360) % 360;
+    const isFront = eff < theta / 2 || eff > 360 - theta / 2;
+    card.classList.toggle('card-focused', isFront);
+});
+```
+
+**CSS**：
+```css
+.card-focused {
+    outline: 2px solid rgba(255,255,255,.6);
+    outline-offset: 4px;
+    filter: brightness(1.0) !important; /* 強制最亮 */
+}
+```
+
+---
+
+### AW. 語音控制（Web Speech API）
+
+> **難度**：⭐⭐⭐｜**效益**：解放雙手，展覽 / 簡報情境下用語音操作畫廊極具創意
+
+```js
+const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+recognition.lang = 'zh-TW';
+recognition.continuous = true;
+
+recognition.onresult = ({ results }) => {
+    const cmd = results[results.length - 1][0].transcript.trim();
+    if (cmd.includes('下一張') || cmd.includes('向右'))  velocityX -= theta;
+    if (cmd.includes('上一張') || cmd.includes('向左'))  velocityX += theta;
+    if (cmd.includes('放大') || cmd.includes('沉浸'))     enterImmersiveMode();
+    if (cmd.includes('退出') || cmd.includes('縮小'))     exitImmersiveMode();
+    if (cmd.includes('放映') || cmd.includes('幻燈片'))   startSlideshow();
+    if (cmd.includes('停止'))                             stopSlideshow();
+};
+```
+
+**UI 設計**：
+- 新增 🎤 麥克風按鈕，點亮時顯示脈衝動畫表示聆聽中
+- 識別到指令後在底部短暫顯示「✅ 已執行：下一張」Banner
+- 右下角小型「語音指令說明」浮層（hover 展開）
+
+---
+
+### AX. 相片水印 / 版權標記（Canvas 合成）
+
+> **難度**：⭐⭐⭐｜**效益**：攝影師保護版權，公開分享不怕被盜圖
+
+```js
+async function addWatermark(blob, text = '© 我的相簿') {
+    const img  = await createImageBitmap(blob);
+    const canvas = Object.assign(document.createElement('canvas'),
+        { width: img.width, height: img.height });
+    const ctx  = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    // 半透明文字水印
+    ctx.font = `bold ${Math.round(img.width * 0.035)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.textAlign = 'right';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur  = 6;
+    ctx.fillText(text, img.width - 20, img.height - 20);
+
+    return new Promise(res => canvas.toBlob(res, 'image/webp', 0.9));
+}
+```
+
+**UI 設計**：
+- 版型抽屜下方新增「水印設定」區塊
+- 可輸入水印文字、位置（右下 / 左下 / 居中）、透明度滑桿（10%～60%）
+- 「僅在公開模式加水印」選項（登入後才顯示）
+
+---
+
 ### AO. 旋轉動畫匯出（WebM / GIF）
 
 > **難度**：⭐⭐⭐⭐｜**效益**：直接分享動態畫廊到社群媒體，視覺衝擊力極強
@@ -803,6 +952,7 @@ src/
 | v6.0 | E F G H I | 拖曳 / 行內編輯 / 壓縮 / 批次 / 標籤 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v7.0 | U W Y AA | 版型 / 波浪 / 公開連結 / 公開規則 | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v8.0 | — | 自動還原 + 手動還原 + 一鍵刪除 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| **v8.1** | **—** | **多排圓圈 + 深度暗化 + 沉浸模式** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 最新完成** |
 | **v9.0** | **AB** | **EXIF 自動日期 / 相機** | **⭐⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
 | **v9.0** | **AC** | **即時關鍵字搜尋** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
 | **v9.0** | **AD** | **幻燈片播放模式** | **⭐⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
@@ -820,6 +970,12 @@ src/
 | v11.0+ | AP | PWA 完整離線支援 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AQ | 相簿統計儀表板 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AR | Vite + React + TS 重構 | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
+| v9.0 | AS | 旋轉靈敏度 + 鍵盤步進細調 | ⭐ | ⭐ | ⭐⭐⭐ | 💡 優化 |
+| v9.0 | AT | 卡片陰影深度動畫 | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | 💡 優化 |
+| v9.0 | AU | 沉浸模式多情境預設 | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 💡 優化 |
+| v10.0 | AV | 卡片自動對焦高亮 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AW | 語音控制（Web Speech API） | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | 📅 中期 |
+| v11.0+ | AX | 相片水印 / 版權標記 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 
 ---
 
