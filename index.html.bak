@@ -10,8 +10,6 @@
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
     <!-- 按鈕通用樣式（取代 Tailwind CDN，避免正式環境警告） -->
 
-    <!-- QRCode.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <!-- Firebase SDK (v10 模組化 CDN) -->
     <script type="module">
@@ -93,33 +91,6 @@
 
         .btn-slate:hover {
             background: #475569;
-        }
-
-        /* ── 沉浸模式按鈕樣式 ── */
-        .btn-immersive {
-            background: linear-gradient(135deg, #4c1d95, #7c3aed);
-        }
-
-        .btn-immersive:hover {
-            background: linear-gradient(135deg, #5b21b6, #8b5cf6);
-        }
-
-        .btn-immersive.active {
-            background: linear-gradient(135deg, #7c3aed, #a78bfa);
-            box-shadow: 0 0 12px rgba(139, 92, 246, .7), 0 0 24px rgba(139, 92, 246, .35);
-            animation: immersive-pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes immersive-pulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 10px rgba(139, 92, 246, .6), 0 0 22px rgba(139, 92, 246, .3);
-            }
-
-            50% {
-                box-shadow: 0 0 18px rgba(139, 92, 246, .9), 0 0 36px rgba(139, 92, 246, .5);
-            }
         }
 
         .btn-red {
@@ -768,15 +739,6 @@
             right: 16px;
         }
 
-        /* ===== 唯讀模式（分享連結）：隱藏所有管理 UI ===== */
-        .readonly-mode #user-area,
-        .readonly-mode .control-panel,
-        .readonly-mode #thumb-strip,
-        .readonly-mode #layout-drawer,
-        .readonly-mode #bulk-bar {
-            display: none !important;
-        }
-
         /* ===== 功能三：Firebase 使用者按鈕 ===== */
         #user-area {
             position: fixed;
@@ -786,99 +748,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-            max-width: calc(100vw - 32px);
         }
-
-        /* ===== RWD：平板（≤768px） ===== */
-        @media (max-width: 768px) {
-            #user-area {
-                top: 6px;
-                right: 8px;
-                gap: 5px;
-            }
-
-            #user-area button {
-                padding: 4px 10px !important;
-                font-size: .68rem !important;
-            }
-
-            #user-avatar {
-                width: 26px !important;
-                height: 26px !important;
-            }
-
-            #tag-bar {
-                top: 52px !important;
-            }
-        }
-
-        /* ===== RWD：手機（≤480px） ===== */
-        @media (max-width: 480px) {
-
-            /* 使用者區塊改至底部，避免遮擋畫廊 */
-            #user-area {
-                top: auto;
-                bottom: 0;
-                right: 0;
-                left: 0;
-                max-width: 100vw;
-                background: rgba(10, 10, 25, 0.92);
-                backdrop-filter: blur(12px);
-                border-top: 1px solid rgba(255, 255, 255, .1);
-                padding: 8px 12px;
-                justify-content: center;
-                gap: 6px;
-                flex-wrap: wrap;
-                border-radius: 0;
-            }
-
-            #user-area button {
-                padding: 5px 12px !important;
-                font-size: .7rem !important;
-                border-radius: 16px !important;
-            }
-
-            #user-avatar {
-                width: 28px !important;
-                height: 28px !important;
-            }
-
-            /* 標籤篩選列回到頂部 */
-            #tag-bar {
-                top: 8px !important;
-                left: 0 !important;
-                right: 0 !important;
-                justify-content: center;
-            }
-
-            /* 控制面板在手機向上移動，避免被底部 user-area 遮住 */
-            .control-panel {
-                /* 超小螢幕（≤430px）：同樣適用折疊邏輯，覆蓋掉此前的 bottom:80px */
-                bottom: 0 !important;
-                max-width: 100% !important;
-                padding: 0 !important;
-                gap: 0 !important;
-                border-radius: 18px 18px 0 0 !important;
-            }
-
-            .btn-row {
-                gap: 5px !important;
-            }
-
-            .btn-gallery {
-                padding: 5px 10px !important;
-                font-size: .68rem !important;
-            }
-
-            .btn-upload {
-                padding: 5px 10px !important;
-                font-size: .68rem !important;
-            }
-        }
-
-
 
         #user-avatar {
             width: 32px;
@@ -1080,12 +950,7 @@
             transition: background 0.6s, opacity 0.8s ease;
         }
 
-        /* ── 桌機版：把手區隱藏，直接顯示 panel-title ── */
-        .panel-handle {
-            display: none;
-        }
-
-        /* ── 折疊底部抽屜 ── */
+        /* 自動淡出狀態 */
         .control-panel.panel-dim {
             opacity: 0.15;
         }
@@ -1205,88 +1070,10 @@
                 height: 300px;
             }
 
-            /* ── 手機版：可折疊底部抽屜 ── */
             .control-panel {
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                width: 100%;
-                max-width: 100%;
-                transform: none;
-                border-radius: 18px 18px 0 0;
-                padding: 0;
-                gap: 0;
-                overflow: hidden;
-                transition: max-height 0.38s cubic-bezier(.4, 0, .2, 1),
-                    background 0.6s, opacity 0.8s ease;
-                max-height: 60px;
-                /* 折疊：只露把手+標題 */
-            }
-
-            /* 展開狀態 */
-            .control-panel.panel-expanded {
-                max-height: 280px;
-                /* 展開：足夠容納所有按鈕 */
-            }
-
-            /* 折疊把手條 */
-            .panel-handle {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 4px;
-                padding: 8px 12px 6px;
-                cursor: pointer;
-                user-select: none;
-                -webkit-user-select: none;
-            }
-
-            .panel-handle-bar {
-                width: 40px;
-                height: 4px;
-                border-radius: 99px;
-                background: rgba(255, 255, 255, 0.35);
-                flex-shrink: 0;
-            }
-
-            .panel-handle .panel-title {
-                margin: 0;
-                font-size: 0.9rem;
-            }
-
-            /* 展開後才顯示 hint 和按鈕區 */
-            .control-panel .panel-hint,
-            .control-panel .btn-row,
-            .control-panel .theme-row,
-            .control-panel .keyboard-hint {
-                overflow: hidden;
-                max-height: 0;
-                opacity: 0;
-                transition: max-height 0.32s ease, opacity 0.28s ease;
-                padding: 0 12px;
-            }
-
-            .control-panel.panel-expanded .panel-hint,
-            .control-panel.panel-expanded .btn-row,
-            .control-panel.panel-expanded .theme-row,
-            .control-panel.panel-expanded .keyboard-hint {
-                max-height: 120px;
-                opacity: 1;
-                padding: 2px 12px;
-            }
-
-            /* 展開箭頭 */
-            .panel-handle::after {
-                content: '▲';
-                font-size: 0.6rem;
-                color: rgba(255, 255, 255, 0.4);
-                transition: transform 0.35s ease;
-                line-height: 1;
-            }
-
-            .control-panel.panel-expanded .panel-handle::after {
-                transform: rotate(180deg);
+                bottom: 12px;
+                width: 94%;
+                padding: 10px 12px;
             }
 
             .lb-arrow {
@@ -1822,7 +1609,7 @@
             bottom: 18px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(15, 23, 42, .92);
+            background: rgba(15, 23, 42, .9);
             border: 1px solid rgba(255, 255, 255, .12);
             border-radius: 12px;
             padding: 8px 18px;
@@ -1832,60 +1619,19 @@
             backdrop-filter: blur(12px);
             gap: 10px;
             align-items: center;
-            flex-wrap: nowrap;
-            /* 不換行 */
-            white-space: nowrap;
-            max-width: calc(100vw - 32px);
-            box-sizing: border-box;
         }
 
         #share-bar.visible {
             display: flex;
         }
 
-        #share-bar>span {
-            flex-shrink: 0;
-            /* 「👁 唯讀相簿」不縮 */
-        }
-
         #share-bar strong {
             color: #e2e8f0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            /* 名稱太長則賭...取代 */
-            white-space: nowrap;
-            max-width: 38vw;
-            /* 手機限寬，超出截斷 */
-            flex-shrink: 1;
         }
 
         #share-bar a {
             color: var(--accent);
             text-decoration: none;
-        }
-
-        /* 手機：按鈕只顯示圖示 */
-        @media (max-width: 480px) {
-            #share-bar {
-                padding: 7px 14px;
-                font-size: .72rem;
-                bottom: 12px;
-                gap: 8px;
-            }
-
-            #share-bar>span {
-                display: none;
-                /* 隱藏「👁 唯讀」文字，節省空間 */
-            }
-
-            #share-bar strong {
-                max-width: 45vw;
-            }
-
-            #share-copy-btn {
-                padding: 4px 10px !important;
-                font-size: .7rem !important;
-            }
         }
 
         #share-link-btn {
@@ -1901,129 +1647,6 @@
 
         #share-link-btn:hover {
             opacity: .85;
-        }
-
-        /* ===== QR Code 分享 Modal ===== */
-        #qr-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(12px);
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-
-        #qr-modal.show {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        .qr-box {
-            background: linear-gradient(145deg, rgba(30, 30, 60, 0.97), rgba(15, 15, 35, 0.99));
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 24px;
-            padding: 32px 28px 24px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            width: min(90vw, 340px);
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
-            transform: scale(0.9) translateY(20px);
-            transition: transform 0.35s cubic-bezier(.34, 1.56, .64, 1);
-        }
-
-        #qr-modal.show .qr-box {
-            transform: scale(1) translateY(0);
-        }
-
-        .qr-title {
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: .02em;
-        }
-
-        .qr-subtitle {
-            font-size: .75rem;
-            color: rgba(255, 255, 255, .45);
-            text-align: center;
-            line-height: 1.5;
-            margin-top: -8px;
-        }
-
-        #qr-canvas-wrap {
-            background: #fff;
-            border-radius: 16px;
-            padding: 14px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #qr-canvas-wrap canvas,
-        #qr-canvas-wrap img {
-            display: block;
-            border-radius: 4px;
-        }
-
-        .qr-url-row {
-            display: flex;
-            gap: 8px;
-            width: 100%;
-        }
-
-        .qr-url-input {
-            flex: 1;
-            background: rgba(255, 255, 255, .07);
-            border: 1px solid rgba(255, 255, 255, .15);
-            border-radius: 10px;
-            padding: 8px 12px;
-            color: rgba(255, 255, 255, .75);
-            font-size: .72rem;
-            outline: none;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .qr-copy-btn {
-            padding: 8px 16px;
-            border-radius: 10px;
-            background: var(--accent);
-            border: none;
-            color: #fff;
-            font-size: .75rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: opacity .18s;
-            white-space: nowrap;
-        }
-
-        .qr-copy-btn:hover {
-            opacity: .85;
-        }
-
-        .qr-close-btn {
-            padding: 6px 24px;
-            border-radius: 50px;
-            background: rgba(255, 255, 255, .08);
-            border: 1px solid rgba(255, 255, 255, .15);
-            color: rgba(255, 255, 255, .6);
-            font-size: .75rem;
-            cursor: pointer;
-            transition: background .2s;
-        }
-
-        .qr-close-btn:hover {
-            background: rgba(255, 255, 255, .18);
-            color: #fff;
         }
 
         /* ===== 功能I：自訂標籤管理 Modal ===== */
@@ -2247,11 +1870,7 @@
 
     <!-- ===== 控制面板 ===== -->
     <div class="control-panel">
-        <!-- 手機版折疊把手（桌機版 CSS 隱藏此區，直接顯示 panel-title） -->
-        <div class="panel-handle" id="panel-handle">
-            <div class="panel-handle-bar"></div>
-            <h2 class="panel-title">我的 3D 畫廊</h2>
-        </div>
+        <h2 class="panel-title">我的 3D 畫廊</h2>
         <p class="panel-hint">拖曳旋轉 ｜ ↑↓ 傾斜 ｜ 滾輪縮放 ｜ 點擊放大</p>
 
         <div class="btn-row">
@@ -2290,11 +1909,6 @@
                 ⚙️ 標籤
             </button>
 
-            <!-- 沈浸模式 -->
-            <button id="immersive-btn" class="btn-gallery btn-immersive">
-                🎥 沈浸
-            </button>
-
             <!-- 版型設定 (功能U) -->
             <button id="layout-panel-btn" class="btn-gallery btn-slate">
                 📐 版型
@@ -2329,23 +1943,8 @@
         <p class="panel-hint">鍵盤 ← → ↑ ↓ ｜ 圖片自動儲存於瀏覽器</p>
     </div>
 
-    <!-- ===== QR Code 分享 Modal ===== -->
-    <div id="qr-modal">
-        <div class="qr-box">
-            <div class="qr-title">🔗 掃描 QR Code 分享畫廊</div>
-            <p class="qr-subtitle">用手機相機掃描，立即開啟 3D 畫廊！</p>
-            <div id="qr-canvas-wrap"></div>
-            <div class="qr-url-row">
-                <input class="qr-url-input" id="qr-url-input" readonly>
-                <button class="qr-copy-btn" id="qr-copy-btn">📋 複製</button>
-            </div>
-            <button class="qr-close-btn" id="qr-close-btn">關閉</button>
-        </div>
-    </div>
-
     <!-- ===== 縮圖帶 ===== -->
     <div id="thumb-strip"></div>
-
 
     <!-- ===== 功能U：版型設定抽屜 ===== -->
     <div id="layout-drawer">
@@ -2501,8 +2100,7 @@
         let isAutoRotating = true;
         let autoRotateRafId = null;      // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;      // 自動旋轉速度（度/幀），可調整
-        let numImages = 0, theta = 0, perRowGlobal = 1;
-        let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
+        let numImages = 0, theta = 0;
         let lbCurrentIndex = 0, lbOpen = false;
 
         // 上傳暫存（等待 Modal 確認）
@@ -2549,7 +2147,6 @@
             document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
             buildGallery(); if (isAutoRotating) startAutoRotate();
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
-            saveLayoutToCloud();
         });
         lvHeight.addEventListener('input', () => {
             layoutCfg.h = +lvHeight.value;
@@ -2557,7 +2154,6 @@
             document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
             buildGallery(); if (isAutoRotating) startAutoRotate();
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
-            saveLayoutToCloud();
         });
         lvPersp.addEventListener('input', () => {
             layoutCfg.persp = +lvPersp.value;
@@ -2565,43 +2161,13 @@
             perspective = layoutCfg.persp;
             scene.style.perspective = perspective + 'px';
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
-            saveLayoutToCloud();
         });
-
         lvReset.addEventListener('click', () => {
             layoutCfg = { ...DEFAULT_LAYOUT };
             localStorage.removeItem(LS_KEY_LAYOUT);
             applyLayoutCfg(true); // true = 需要重建畫廊
-            saveLayoutToCloud();
             showBanner('↺ 版型已還原預設', false);
         });
-
-        // ── 版型設定自動儲存到雲端(防抖 1.5s)，方案B ───────────────
-        let _saveLayoutTimer = null;
-        function saveLayoutToCloud() {
-            const fb = window._fb;
-            const user = fb && fb.auth ? fb.auth.currentUser : null;
-            if (!fb || !user) return;
-            clearTimeout(_saveLayoutTimer);
-            _saveLayoutTimer = setTimeout(async () => {
-                try {
-                    await fb.setDoc(
-                        fb.doc(fb.db, `users/${user.uid}/profile/info`),
-                        {
-                            layout: {
-                                w: layoutCfg.w,
-                                h: layoutCfg.h,
-                                persp: layoutCfg.persp,
-                                speed: autoRotateSpeed
-                            },
-                            updatedAt: Date.now()
-                        },
-                        { merge: true }
-                    );
-                } catch (e) { /* 雲端儲存失敗，非致命性錯誤，忽略 */ }
-            }, 1500);
-        }
-        // ────────────────────────────────────────────────────────────
 
         // 點擊抽屜外部關閉
         document.addEventListener('pointerdown', (e) => {
@@ -2643,16 +2209,6 @@
                         const data = doc.exists() ? doc.data() : {};
                         shareOwnerName.textContent = (data.displayName || '使用者') + ' 的相簿';
 
-                        // ── 套用分享者的版型設定（方案B）─────────────────────
-                        if (data.layout) {
-                            const lv = data.layout;
-                            if (lv.w) { layoutCfg.w = lv.w; document.documentElement.style.setProperty('--card-w', lv.w + 'px'); }
-                            if (lv.h) { layoutCfg.h = lv.h; document.documentElement.style.setProperty('--card-h', lv.h + 'px'); }
-                            if (lv.persp) { layoutCfg.persp = lv.persp; perspective = lv.persp; scene.style.perspective = lv.persp + 'px'; }
-                            if (lv.speed !== undefined) autoRotateSpeed = lv.speed;
-                        }
-                        // ────────────────────────────────────────────────────────────
-
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
                             carousel.innerHTML = '<p style="color:rgba(255,255,255,.45);font-size:.9rem;text-align:center;margin-top:160px;">🔒 此相簿尚未公開</p>';
@@ -2688,58 +2244,17 @@
         })();
 
         // 分享按鈕：產生公開連結並複製到剪貼簿
-        // QR Code Modal 邏輯
-        const qrModal = document.getElementById('qr-modal');
-        const qrWrap = document.getElementById('qr-canvas-wrap');
-        const qrUrlInput = document.getElementById('qr-url-input');
-        const qrCopyBtn = document.getElementById('qr-copy-btn');
-        const qrCloseBtn = document.getElementById('qr-close-btn');
-        let _qrInstance = null;
-
-        function openQrModal(url) {
-            qrUrlInput.value = url;
-
-            // 清除舊 QR Code
-            qrWrap.innerHTML = '';
-            _qrInstance = null;
-
-            try {
-                _qrInstance = new QRCode(qrWrap, {
-                    text: url,
-                    width: 200,
-                    height: 200,
-                    colorDark: '#1a1a2e',
-                    colorLight: '#ffffff',
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-            } catch (e) {
-                // fallback：用 Google Charts API
-                const img = document.createElement('img');
-                img.src = `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(url)}&choe=UTF-8`;
-                img.width = 200; img.height = 200;
-                qrWrap.appendChild(img);
-            }
-
-            qrModal.classList.add('show');
-        }
-
-        qrCloseBtn.addEventListener('click', () => qrModal.classList.remove('show'));
-        qrModal.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.classList.remove('show'); });
-
-        qrCopyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(qrUrlInput.value).then(() => {
-                qrCopyBtn.textContent = '✅ 已複製！';
-                setTimeout(() => qrCopyBtn.textContent = '📋 複製', 1800);
-            });
-        });
-
         shareLinkBtn.addEventListener('click', () => {
             if (!currentUser) {
                 showBanner('⚠️ 請先登入才能分享', true); return;
             }
             const tag = activeTag !== '全部' ? `&tag=${encodeURIComponent(activeTag)}` : '';
             const url = `${location.origin}${location.pathname}?view=${currentUser.uid}${tag}`;
-            openQrModal(url);
+            navigator.clipboard.writeText(url).then(() => {
+                showBanner('🔗 分享連結已複製！', false);
+            }).catch(() => {
+                prompt('請手動複製下方連結：', url);
+            });
         });
 
         // 唯讀頁面複製按鈕
@@ -2985,22 +2500,16 @@
             numImages = filteredData.length;
             if (!numImages) { carousel.innerHTML = '<p style="color:rgba(255,255,255,.3);font-size:.8rem;text-align:center;margin-top:140px;">此分類暫無圖片</p>'; return; }
 
+            theta = 360 / numImages;
+            // 正確半徑公式：由卡片寬度和張數決定，保證不重疊
+            // r = (cardW + gap) / (2 * sin(π/n))
             const cardW = parseFloat(
                 getComputedStyle(document.documentElement).getPropertyValue('--card-w')
             ) || 260;
-            const GAP = 24;     // 卡片水平間距（px）
-            const ROW_GAP = 30; // 排與排之間垂直間距（px）
-
-            // ── 多排圓圈計算 ────────────────────────────────────
-            // 半徑上限：不超過透視深度的 72%，防止後排卡片超越攝影機導致翻轉
-            const MAX_R = Math.min(perspective * 0.72, 3600);
-            // 依 MAX_R 計算每排最多幾張（圓周 / 卡片佔位）
-            const maxPerRow = numImages <= 1
-                ? 1
-                : Math.max(3, Math.floor(2 * Math.PI * MAX_R / (cardW + GAP)));
-            const perRow = Math.min(numImages, maxPerRow);
-            const rowCount = Math.ceil(numImages / perRow);
-            // ────────────────────────────────────────────────────
+            const GAP = 24; // 卡片間距（px）
+            const r = numImages <= 1
+                ? 0
+                : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / numImages)));
 
             filteredData.forEach((data, i) => {
                 const item = document.createElement('div');
@@ -3133,21 +2642,7 @@
 
                 inner.appendChild(front); inner.appendChild(back);
                 item.appendChild(inner);
-                // ── 計算本張卡片屬於第幾排、該排第幾格 ──
-                const row = Math.floor(i / perRow);
-                const colInRow = i % perRow;
-                // 最後一排可能不滿，需重算該排實際數量
-                const colsInThisRow = (row < rowCount - 1)
-                    ? perRow
-                    : ((numImages % perRow) || perRow);
-                const thetaInRow = 360 / colsInThisRow;
-                const rInRow = colsInThisRow <= 1
-                    ? 0
-                    : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / colsInThisRow)));
-                // 垂直偏移：多排垂直置中
-                const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
-                item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
-                item.dataset.baseAngle = thetaInRow * colInRow; // 記錄基礎角度，供深度暗化使用
+                item.style.transform = `rotateY(${theta * i}deg) translateZ(${r}px)`;
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3155,12 +2650,6 @@
                 });
                 carousel.appendChild(item);
             });
-
-            // 同步全域 theta / perRowGlobal 供鍵盤步進和縮圖點擊使用
-            theta = 360 / perRow;
-            perRowGlobal = perRow;
-            // 快取卡片清單供深度暗化使用（避免每幀重複 querySelectorAll）
-            galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
 
             // 重建縮圖帶
             buildThumbStrip();
@@ -3194,56 +2683,6 @@
             showBanner(`🗑 已刪除 ${toRemove.length} 張`, false);
         });
         bulkCancelBtn.addEventListener('click', exitSelectMode);
-
-        // ================================================================
-        //  🎥 沉浸模式切換
-        // ================================================================
-        const immersiveBtn = document.getElementById('immersive-btn');
-        let isImmersive = false;
-        // 沉浸模式的預設參數
-        const IMMERSIVE_PRESET = { w: 420, h: 600, persp: 750 };
-        // 記錄進入沉浸前的版型設定
-        let preImmersiveLayout = null;
-
-        function enterImmersiveMode() {
-            preImmersiveLayout = { ...layoutCfg }; // 備份目前設定
-            // 套用沉浸參數
-            layoutCfg.w = IMMERSIVE_PRESET.w;
-            layoutCfg.h = IMMERSIVE_PRESET.h;
-            layoutCfg.persp = IMMERSIVE_PRESET.persp;
-            // 加入平滑過渡
-            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
-            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
-            perspective = layoutCfg.persp;
-            scene.style.perspective = perspective + 'px';
-            // 場景加入過渡動畫
-            carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
-            buildGallery();
-            if (isAutoRotating) startAutoRotate();
-            isImmersive = true;
-            immersiveBtn.textContent = '⏏️ 退出';
-            immersiveBtn.classList.add('active');
-            showBanner('🎥 沉浸模式 — 大螢幕沉浸體驗', false);
-        }
-
-        function exitImmersiveMode() {
-            layoutCfg = { ...preImmersiveLayout }; // 還原備份設定
-            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
-            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
-            perspective = layoutCfg.persp;
-            scene.style.perspective = perspective + 'px';
-            buildGallery();
-            if (isAutoRotating) startAutoRotate();
-            isImmersive = false;
-            immersiveBtn.textContent = '🎥 沉浸';
-            immersiveBtn.classList.remove('active');
-            showBanner('↩ 已退出沉浸模式', false);
-        }
-
-        immersiveBtn.addEventListener('click', () => {
-            if (isImmersive) exitImmersiveMode();
-            else enterImmersiveMode();
-        });
 
         // ================================================================
         //  功能E: 編輯模式切換
@@ -3337,17 +2776,6 @@
             const pX = isDragging ? 0 : parallaxX;
             const pY = isDragging ? 0 : parallaxY;
             carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
-
-            // ── 深度暗化：依各卡片面向角動態調整亮度 ──────────────────
-            // 公式：前排 (cos≈1) → brightness 1.0；後排 (cos≈-1) → brightness 0.3
-            galleryCards.forEach(card => {
-                const base = parseFloat(card.dataset.baseAngle || 0);
-                const eff = (((base + currentRotationY) % 360) + 360) % 360;
-                const rad = eff * Math.PI / 180;
-                const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
-                card.style.filter = `brightness(${bright.toFixed(2)})`;
-            });
-            // ─────────────────────────────────────────────────────────────
         }
         function applyInertia() {
             if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
@@ -3492,7 +2920,6 @@
             lvSpeed.addEventListener('input', () => {
                 autoRotateSpeed = +lvSpeed.value;
                 lvSpeedVal && (lvSpeedVal.textContent = (+lvSpeed.value).toFixed(2) + '度/幀');
-                saveLayoutToCloud(); // 方案B：速度也同步到雲端
             });
         }
 
@@ -3720,29 +3147,11 @@
             isSyncing = true;
             cloudSyncBtn.disabled = true;
             const total = allImageData.length;
-
-            // 設定正確的 overlay 標題（避免殘留 syncFromCloud 的文字）
-            const _syncTi = syncOverlay ? syncOverlay.querySelector('.sync-title') : null;
-            const _syncIc = syncOverlay ? syncOverlay.querySelector('.sync-icon') : null;
-            if (_syncTi) _syncTi.textContent = '☁️ 同步至雲端...';
-            if (_syncIc) _syncIc.textContent = '☁️';
-
             showSyncProgress(0, total, '準備上傳...');
 
             try {
-                // ── Step 1：先刪除雲端所有舊圖片文件（避免重複）──────────────
-                showSyncProgress(0, total, '🗑️ 清除舊同步紀錄...');
-                const existingSnap = await fb.getDocs(
-                    fb.collection(fb.db, `users/${currentUser.uid}/images`)
-                );
-                if (!existingSnap.empty) {
-                    await Promise.all(existingSnap.docs.map(d => fb.deleteDoc(d.ref)));
-                }
-                // ────────────────────────────────────────────────────────────
-
-                // ── Step 2：重新上傳所有本機圖片 ────────────────────────────
-                const syncPrefix = Date.now(); // 本次同步的唯一前綴
                 for (let i = 0; i < total; i++) {
+                    // 每張前確認仍在登入狀態
                     if (!currentUser) {
                         hideSyncProgress();
                         showBanner('⚠️ 登入逾時，同步中斷', true);
@@ -3750,12 +3159,12 @@
                     }
 
                     const data = allImageData[i];
-                    const docId = `img_${syncPrefix}_${i}`;
+                    const docId = `img_${Date.now()}_${i}`;
                     const label = data.title || `圖片 ${i + 1}`;
 
                     showSyncProgress(i, total, `上傳中：${label}`);
 
-                    // 若已是 Storage HTTPS URL → 直接複用，不重複上傳到 Storage
+                    // 若是 Base64，先上傳到 Storage
                     let url = data.src;
                     if (data.src.startsWith('data:')) {
                         const blob = await (await fetch(data.src)).blob();
@@ -3763,9 +3172,6 @@
                             `users/${currentUser.uid}/images/${docId}`);
                         await fb.uploadBytes(sRef, blob);
                         url = await fb.getDownloadURL(sRef);
-
-                        // 更新記憶體中的 src，避免下次還被認為是 Base64
-                        allImageData[i] = { ...data, src: url };
                     }
 
                     // 寫入 Firestore
@@ -3776,10 +3182,6 @@
 
                     showSyncProgress(i + 1, total, `✅ 已完成：${label}`);
                 }
-                // ────────────────────────────────────────────────────────────
-
-                // 同步完成後更新 localStorage（避免下次還帶 Base64）
-                localStorage.setItem(LS_KEY_IMAGES, JSON.stringify(allImageData));
 
                 // 完成
                 showSyncProgress(total, total, '✅ 全部同步完成！');
@@ -3796,7 +3198,6 @@
                 cloudSyncBtn.disabled = false;
             }
         });
-
 
         // 從雲端載入
         async function loadFromCloud() {
@@ -3928,7 +3329,7 @@
                 num.className = 'thumb-num'; num.textContent = i + 1;
                 el.appendChild(img); el.appendChild(num);
                 el.addEventListener('click', () => {
-                    currentRotationY = -((i % perRowGlobal) * theta);
+                    currentRotationY = -(theta * i);
                     carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
                     applyTransform();
                     updateThumbActive(i);
@@ -3978,27 +3379,6 @@
 
         // ── 控制面板自動淡出（5秒後淡至半透明，hover 恢復）────────────────
         const _panel = document.querySelector('.control-panel');
-        const _panelHandle = document.getElementById('panel-handle');
-
-        // 手機版折疊抽屜：點擊把手切換展開/折疊
-        function isMobile() { return window.innerWidth <= 768; }
-
-        if (_panelHandle) {
-            _panelHandle.addEventListener('click', () => {
-                if (!isMobile()) return;
-                _panel.classList.toggle('panel-expanded');
-            });
-        }
-
-        // 損曳畫廊時自動折疊面板（於手機版）
-        ['mousedown', 'touchstart'].forEach(ev => {
-            document.addEventListener(ev, (e) => {
-                if (!isMobile()) return;
-                // 如果點擊目標是控制面板內部，不折疊
-                if (_panel && _panel.contains(e.target)) return;
-                if (_panel) _panel.classList.remove('panel-expanded');
-            }, { passive: true });
-        });
         let _panelTimer = null;
 
         function panelStartTimer() {
