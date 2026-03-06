@@ -855,10 +855,12 @@
 
             /* 控制面板在手機向上移動，避免被底部 user-area 遮住 */
             .control-panel {
-                bottom: 80px !important;
-                max-width: calc(100vw - 24px);
-                padding: 10px 14px !important;
-                gap: 8px !important;
+                /* 超小螢幕（≤430px）：同樣適用折疊邏輯，覆蓋掉此前的 bottom:80px */
+                bottom: 0 !important;
+                max-width: 100% !important;
+                padding: 0 !important;
+                gap: 0 !important;
+                border-radius: 18px 18px 0 0 !important;
             }
 
             .btn-row {
@@ -1078,7 +1080,12 @@
             transition: background 0.6s, opacity 0.8s ease;
         }
 
-        /* 自動淡出狀態 */
+        /* ── 桌機版：把手區隱藏，直接顯示 panel-title ── */
+        .panel-handle {
+            display: none;
+        }
+
+        /* ── 折疊底部抽屜 ── */
         .control-panel.panel-dim {
             opacity: 0.15;
         }
@@ -1198,10 +1205,88 @@
                 height: 300px;
             }
 
+            /* ── 手機版：可折疊底部抽屜 ── */
             .control-panel {
-                bottom: 12px;
-                width: 94%;
-                padding: 10px 12px;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                max-width: 100%;
+                transform: none;
+                border-radius: 18px 18px 0 0;
+                padding: 0;
+                gap: 0;
+                overflow: hidden;
+                transition: max-height 0.38s cubic-bezier(.4, 0, .2, 1),
+                    background 0.6s, opacity 0.8s ease;
+                max-height: 60px;
+                /* 折疊：只露把手+標題 */
+            }
+
+            /* 展開狀態 */
+            .control-panel.panel-expanded {
+                max-height: 280px;
+                /* 展開：足夠容納所有按鈕 */
+            }
+
+            /* 折疊把手條 */
+            .panel-handle {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                padding: 8px 12px 6px;
+                cursor: pointer;
+                user-select: none;
+                -webkit-user-select: none;
+            }
+
+            .panel-handle-bar {
+                width: 40px;
+                height: 4px;
+                border-radius: 99px;
+                background: rgba(255, 255, 255, 0.35);
+                flex-shrink: 0;
+            }
+
+            .panel-handle .panel-title {
+                margin: 0;
+                font-size: 0.9rem;
+            }
+
+            /* 展開後才顯示 hint 和按鈕區 */
+            .control-panel .panel-hint,
+            .control-panel .btn-row,
+            .control-panel .theme-row,
+            .control-panel .keyboard-hint {
+                overflow: hidden;
+                max-height: 0;
+                opacity: 0;
+                transition: max-height 0.32s ease, opacity 0.28s ease;
+                padding: 0 12px;
+            }
+
+            .control-panel.panel-expanded .panel-hint,
+            .control-panel.panel-expanded .btn-row,
+            .control-panel.panel-expanded .theme-row,
+            .control-panel.panel-expanded .keyboard-hint {
+                max-height: 120px;
+                opacity: 1;
+                padding: 2px 12px;
+            }
+
+            /* 展開箭頭 */
+            .panel-handle::after {
+                content: '▲';
+                font-size: 0.6rem;
+                color: rgba(255, 255, 255, 0.4);
+                transition: transform 0.35s ease;
+                line-height: 1;
+            }
+
+            .control-panel.panel-expanded .panel-handle::after {
+                transform: rotate(180deg);
             }
 
             .lb-arrow {
@@ -2162,7 +2247,11 @@
 
     <!-- ===== 控制面板 ===== -->
     <div class="control-panel">
-        <h2 class="panel-title">我的 3D 畫廊</h2>
+        <!-- 手機版折疊把手（桌機版 CSS 隱藏此區，直接顯示 panel-title） -->
+        <div class="panel-handle" id="panel-handle">
+            <div class="panel-handle-bar"></div>
+            <h2 class="panel-title">我的 3D 畫廊</h2>
+        </div>
         <p class="panel-hint">拖曳旋轉 ｜ ↑↓ 傾斜 ｜ 滾輪縮放 ｜ 點擊放大</p>
 
         <div class="btn-row">
@@ -3889,6 +3978,27 @@
 
         // ── 控制面板自動淡出（5秒後淡至半透明，hover 恢復）────────────────
         const _panel = document.querySelector('.control-panel');
+        const _panelHandle = document.getElementById('panel-handle');
+
+        // 手機版折疊抽屜：點擊把手切換展開/折疊
+        function isMobile() { return window.innerWidth <= 768; }
+
+        if (_panelHandle) {
+            _panelHandle.addEventListener('click', () => {
+                if (!isMobile()) return;
+                _panel.classList.toggle('panel-expanded');
+            });
+        }
+
+        // 損曳畫廊時自動折疊面板（於手機版）
+        ['mousedown', 'touchstart'].forEach(ev => {
+            document.addEventListener(ev, (e) => {
+                if (!isMobile()) return;
+                // 如果點擊目標是控制面板內部，不折疊
+                if (_panel && _panel.contains(e.target)) return;
+                if (_panel) _panel.classList.remove('panel-expanded');
+            }, { passive: true });
+        });
         let _panelTimer = null;
 
         function panelStartTimer() {
