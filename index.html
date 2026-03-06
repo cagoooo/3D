@@ -95,6 +95,33 @@
             background: #475569;
         }
 
+        /* ── 沉浸模式按鈕樣式 ── */
+        .btn-immersive {
+            background: linear-gradient(135deg, #4c1d95, #7c3aed);
+        }
+
+        .btn-immersive:hover {
+            background: linear-gradient(135deg, #5b21b6, #8b5cf6);
+        }
+
+        .btn-immersive.active {
+            background: linear-gradient(135deg, #7c3aed, #a78bfa);
+            box-shadow: 0 0 12px rgba(139, 92, 246, .7), 0 0 24px rgba(139, 92, 246, .35);
+            animation: immersive-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes immersive-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 10px rgba(139, 92, 246, .6), 0 0 22px rgba(139, 92, 246, .3);
+            }
+
+            50% {
+                box-shadow: 0 0 18px rgba(139, 92, 246, .9), 0 0 36px rgba(139, 92, 246, .5);
+            }
+        }
+
         .btn-red {
             background: #991b1b;
         }
@@ -2174,6 +2201,11 @@
                 ⚙️ 標籤
             </button>
 
+            <!-- 沈浸模式 -->
+            <button id="immersive-btn" class="btn-gallery btn-immersive">
+                🎥 沈浸
+            </button>
+
             <!-- 版型設定 (功能U) -->
             <button id="layout-panel-btn" class="btn-gallery btn-slate">
                 📐 版型
@@ -3073,6 +3105,56 @@
             showBanner(`🗑 已刪除 ${toRemove.length} 張`, false);
         });
         bulkCancelBtn.addEventListener('click', exitSelectMode);
+
+        // ================================================================
+        //  🎥 沉浸模式切換
+        // ================================================================
+        const immersiveBtn = document.getElementById('immersive-btn');
+        let isImmersive = false;
+        // 沉浸模式的預設參數
+        const IMMERSIVE_PRESET = { w: 420, h: 600, persp: 750 };
+        // 記錄進入沉浸前的版型設定
+        let preImmersiveLayout = null;
+
+        function enterImmersiveMode() {
+            preImmersiveLayout = { ...layoutCfg }; // 備份目前設定
+            // 套用沉浸參數
+            layoutCfg.w = IMMERSIVE_PRESET.w;
+            layoutCfg.h = IMMERSIVE_PRESET.h;
+            layoutCfg.persp = IMMERSIVE_PRESET.persp;
+            // 加入平滑過渡
+            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
+            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
+            perspective = layoutCfg.persp;
+            scene.style.perspective = perspective + 'px';
+            // 場景加入過渡動畫
+            carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
+            buildGallery();
+            if (isAutoRotating) startAutoRotate();
+            isImmersive = true;
+            immersiveBtn.textContent = '⏏️ 退出';
+            immersiveBtn.classList.add('active');
+            showBanner('🎥 沉浸模式 — 大螢幕沉浸體驗', false);
+        }
+
+        function exitImmersiveMode() {
+            layoutCfg = { ...preImmersiveLayout }; // 還原備份設定
+            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
+            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
+            perspective = layoutCfg.persp;
+            scene.style.perspective = perspective + 'px';
+            buildGallery();
+            if (isAutoRotating) startAutoRotate();
+            isImmersive = false;
+            immersiveBtn.textContent = '🎥 沉浸';
+            immersiveBtn.classList.remove('active');
+            showBanner('↩ 已退出沉浸模式', false);
+        }
+
+        immersiveBtn.addEventListener('click', () => {
+            if (isImmersive) exitImmersiveMode();
+            else enterImmersiveMode();
+        });
 
         // ================================================================
         //  功能E: 編輯模式切換
