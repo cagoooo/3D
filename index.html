@@ -1508,6 +1508,13 @@
             padding: 1px 0;
         }
 
+        /* AY: 正面高亮 — 最前方卡片金色光暈邊框 */
+        .card-focused {
+            outline: 2.5px solid rgba(251, 191, 36, 0.75);
+            outline-offset: 5px;
+            filter: brightness(1.0) !important;
+        }
+
         /* ===== 功能E：編輯模式 ===== */
         .carousel-item.edit-mode-active {
             outline: 2px dashed rgba(251, 191, 36, .7);
@@ -2420,7 +2427,26 @@
             <input id="lv-key" type="range" min="1" max="5" value="1" step="1">
         </div>
 
+        <!-- AZ: 光源方向控制 -->
+        <div class="layout-row" style="margin-top:6px;">
+            <label>💡 光源角度 <span id="lv-light-val">0°</span></label>
+            <input id="lv-light" type="range" min="0" max="359" value="0" step="5">
+        </div>
+
+        <!-- BA: 快速跳至指定卡片 -->
+        <div class="layout-row" id="lv-jump-row" style="margin-top:6px;display:none;">
+            <label>🎯 跳至卡片</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input id="lv-jump-input" type="number" min="1" placeholder="編號"
+                    style="width:60px;padding:4px 6px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff;font-size:.75rem;text-align:center;">
+                <button id="lv-jump-btn"
+                    style="padding:4px 10px;border-radius:8px;border:none;background:rgba(99,102,241,.6);color:#fff;font-size:.72rem;cursor:pointer;white-space:nowrap;">跳
+                    ▶</button>
+            </div>
+        </div>
+
         <button class="layout-reset-btn" id="lv-reset">↺ 還原預設</button>
+
     </div>
 
     <!-- ===== 功能Y：唯讀分享列 ===== -->
@@ -2690,6 +2716,54 @@
             });
         }
 
+        // ── AZ: 光源角度滑桌 ──────────────────────────────────────────
+        const lvLight = document.getElementById('lv-light');
+        const lvLightVal = document.getElementById('lv-light-val');
+        if (lvLight) {
+            lvLight.value = layoutCfg.lightAngle || 0;
+            lvLightVal.textContent = (layoutCfg.lightAngle || 0) + '°';
+            lvLight.addEventListener('input', () => {
+                layoutCfg.lightAngle = parseInt(lvLight.value);
+                lvLightVal.textContent = lvLight.value + '°';
+                applyTransform();
+                saveLayoutToCloud();
+            });
+        }
+
+        // ── BA: 快速跳至指定卡片 ──────────────────────────────────
+        const lvJumpRow = document.getElementById('lv-jump-row');
+        const lvJumpInput = document.getElementById('lv-jump-input');
+        const lvJumpBtn = document.getElementById('lv-jump-btn');
+        function jumpToCard(n) {
+            const idx = Math.max(0, Math.min(filteredData.length - 1, n - 1));
+            const step = theta || 45;
+            currentRotationY = -idx * step;
+            carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)';
+            applyTransform();
+            updateThumbActive(idx);
+            setTimeout(() => { carousel.style.transition = ''; }, 550);
+            showBanner(`🎯 跳至第 ${idx + 1} 張`, false);
+        }
+        if (lvJumpBtn) {
+            lvJumpBtn.addEventListener('click', () => {
+                const v = parseInt(lvJumpInput.value);
+                if (!isNaN(v)) jumpToCard(v);
+            });
+        }
+        if (lvJumpInput) {
+            lvJumpInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { const v = parseInt(lvJumpInput.value); if (!isNaN(v)) jumpToCard(v); }
+            });
+        }
+        // Ctrl+G 快速開啟版型抽屎且跳至輸入框
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && e.key === 'g') {
+                e.preventDefault();
+                layoutDrawer.classList.add('open');
+                setTimeout(() => lvJumpInput && lvJumpInput.focus(), 100);
+            }
+        });
+
         // ── 版型設定自動儲存到雲端(防抖 1.5s)，方案B ───────────────
         let _saveLayoutTimer = null;
         function saveLayoutToCloud() {
@@ -2706,7 +2780,11 @@
                                 w: layoutCfg.w,
                                 h: layoutCfg.h,
                                 persp: layoutCfg.persp,
-                                speed: autoRotateSpeed
+                                speed: autoRotateSpeed,
+                                dragSens: layoutCfg.dragSens || 1.0,
+                                touchSens: layoutCfg.touchSens || 1.0,
+                                keySens: layoutCfg.keySens || 1,
+                                lightAngle: layoutCfg.lightAngle || 0
                             },
                             updatedAt: Date.now()
                         },
@@ -3453,9 +3531,12 @@
             carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
 
             // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
+            // AZ: lightAngle 光源角度偏移（0=正前方光，90=右側光）
+            const lightOff = layoutCfg.lightAngle || 0;
+            let frontCardEl = null; let frontBright = -1;
             galleryCards.forEach(card => {
                 const base = parseFloat(card.dataset.baseAngle || 0);
-                const eff = (((base + currentRotationY) % 360) + 360) % 360;
+                const eff = (((base + currentRotationY + lightOff) % 360) + 360) % 360;
                 const rad = eff * Math.PI / 180;
                 const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
                 // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
@@ -3463,14 +3544,32 @@
                 const shadowAlpha = (bright * 0.55).toFixed(2);
                 card.style.filter = `brightness(${bright.toFixed(2)})`;
                 card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+                // AY: 找到最亮(最前方)的卡片
+                if (bright > frontBright) { frontBright = bright; frontCardEl = card; }
             });
+            // AY: 正面高亮 — 只有最前方卡片加 card-focused 類別
+            galleryCards.forEach(card => card.classList.toggle('card-focused', card === frontCardEl));
         }
+        // AY: 慣性停止後自動 Snap 吸附最近卡片
+        function snapToNearest() {
+            if (!theta || theta <= 0) return;
+            const nearest = Math.round(currentRotationY / theta) * theta;
+            carousel.style.transition = 'transform 0.38s cubic-bezier(.2,.8,.2,1)';
+            currentRotationY = nearest;
+            applyTransform();
+            // 吸附完成後移除過渡動畫
+            setTimeout(() => { carousel.style.transition = ''; }, 400);
+        }
+
         function applyInertia() {
             if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
                 currentRotationY += velocityX; currentRotationX += velocityY;
                 applyTransform();
                 velocityX *= 0.93; velocityY *= 0.93;
                 animationFrameId = requestAnimationFrame(applyInertia);
+            } else {
+                // AY: 慣性幾乎停止時，自動 Snap 到最近卡片
+                snapToNearest();
             }
         }
 
@@ -4004,6 +4103,17 @@
                 buildTagBar();
                 buildGallery();
                 saveToLocalStorage();
+
+                // BD: 從雲端還原利敏度 / 光源 / 送入 layoutCfg
+                const profileSnap = await fb.getDoc(fb.doc(fb.db, `users/${currentUser.uid}/profile/info`));
+                if (profileSnap.exists()) {
+                    const lay = profileSnap.data().layout || {};
+                    if (lay.dragSens !== undefined) { layoutCfg.dragSens = lay.dragSens; if (lvDrag) { lvDrag.value = lay.dragSens; lvDragVal.textContent = (+lay.dragSens).toFixed(1) + 'x'; } }
+                    if (lay.touchSens !== undefined) { layoutCfg.touchSens = lay.touchSens; if (lvTouch) { lvTouch.value = lay.touchSens; lvTouchVal.textContent = (+lay.touchSens).toFixed(1) + 'x'; } }
+                    if (lay.keySens !== undefined) { layoutCfg.keySens = lay.keySens; if (lvKey) { lvKey.value = lay.keySens; lvKeyVal.textContent = lay.keySens + '排'; } }
+                    if (lay.lightAngle !== undefined) { layoutCfg.lightAngle = lay.lightAngle; const lvL = document.getElementById('lv-light'); const lvLV = document.getElementById('lv-light-val'); if (lvL) { lvL.value = lay.lightAngle; lvLV.textContent = lay.lightAngle + '°'; } applyTransform(); }
+                }
+
                 showBanner(`📲 雲端已還原 ${allImageData.length} 張圖片！`, false);
             } catch (e) {
                 if (syncOv) syncOv.classList.remove('show');
@@ -4078,13 +4188,44 @@
         // ================================================================
         //  功能C：縮圖帶
         // ================================================================
+        // BB: 虛擬縮圖帶（只渲染可視視窗±8張，大量圖片時不卡頓）
         let thumbStripVisible = false;
+        const THUMB_W = 54; // 縮圖寬 + gap
+        const THUMB_EXTRA = 8; // 左右實際多渲染數
+        let thumbVirtualTotal = 0;
 
         function buildThumbStrip() {
+            thumbVirtualTotal = filteredData.length;
             thumbStrip.innerHTML = '';
-            filteredData.forEach((data, i) => {
+            // 設定捲軸容器寬度
+            thumbStrip.style.width = (thumbVirtualTotal * THUMB_W) + 'px';
+            thumbStrip.style.position = 'relative';
+            renderThumbRange();
+
+            // BA: 圖片 ≥ 10 張才顯示跳至輸入框
+            if (lvJumpRow) lvJumpRow.style.display = thumbVirtualTotal >= 10 ? '' : 'none';
+        }
+
+        function renderThumbRange() {
+            const scrollLeft = thumbStrip.parentElement ? thumbStrip.parentElement.scrollLeft : 0;
+            const visibleW = thumbStrip.parentElement ? thumbStrip.parentElement.offsetWidth : 300;
+            const startIdx = Math.max(0, Math.floor(scrollLeft / THUMB_W) - THUMB_EXTRA);
+            const endIdx = Math.min(thumbVirtualTotal, Math.ceil((scrollLeft + visibleW) / THUMB_W) + THUMB_EXTRA);
+
+            // 移除超出範圍的結点
+            thumbStrip.querySelectorAll('.thumb-item[data-idx]').forEach(el => {
+                const i = parseInt(el.dataset.idx);
+                if (i < startIdx || i >= endIdx) el.remove();
+            });
+
+            // 添加新進入範圍的結点
+            for (let i = startIdx; i < endIdx; i++) {
+                if (thumbStrip.querySelector(`.thumb-item[data-idx="${i}"]`)) continue;
+                const data = filteredData[i];
                 const el = document.createElement('div');
                 el.className = 'thumb-item';
+                el.dataset.idx = i;
+                el.style.cssText = `position:absolute;left:${i * THUMB_W}px;top:0;width:${THUMB_W - 4}px;`;
                 const img = document.createElement('img');
                 img.src = data.src; img.alt = '';
                 img.onerror = () => { img.src = `https://picsum.photos/seed/${i}/100/120`; };
@@ -4096,9 +4237,15 @@
                     carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
                     applyTransform();
                     updateThumbActive(i);
+                    setTimeout(() => { carousel.style.transition = ''; }, 650);
                 });
                 thumbStrip.appendChild(el);
-            });
+            }
+        }
+
+        // 容器滾動時重新渲染虛擬範圍
+        if (thumbStrip.parentElement) {
+            thumbStrip.parentElement.addEventListener('scroll', renderThumbRange, { passive: true });
         }
 
         function updateThumbActive(idx) {
