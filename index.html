@@ -10,6 +10,8 @@
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
     <!-- 按鈕通用樣式（取代 Tailwind CDN，避免正式環境警告） -->
 
+    <!-- QRCode.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <!-- Firebase SDK (v10 模組化 CDN) -->
     <script type="module">
@@ -1659,6 +1661,129 @@
             opacity: .85;
         }
 
+        /* ===== QR Code 分享 Modal ===== */
+        #qr-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(12px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #qr-modal.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .qr-box {
+            background: linear-gradient(145deg, rgba(30, 30, 60, 0.97), rgba(15, 15, 35, 0.99));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 24px;
+            padding: 32px 28px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            width: min(90vw, 340px);
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            transform: scale(0.9) translateY(20px);
+            transition: transform 0.35s cubic-bezier(.34, 1.56, .64, 1);
+        }
+
+        #qr-modal.show .qr-box {
+            transform: scale(1) translateY(0);
+        }
+
+        .qr-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: .02em;
+        }
+
+        .qr-subtitle {
+            font-size: .75rem;
+            color: rgba(255, 255, 255, .45);
+            text-align: center;
+            line-height: 1.5;
+            margin-top: -8px;
+        }
+
+        #qr-canvas-wrap {
+            background: #fff;
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #qr-canvas-wrap canvas,
+        #qr-canvas-wrap img {
+            display: block;
+            border-radius: 4px;
+        }
+
+        .qr-url-row {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .qr-url-input {
+            flex: 1;
+            background: rgba(255, 255, 255, .07);
+            border: 1px solid rgba(255, 255, 255, .15);
+            border-radius: 10px;
+            padding: 8px 12px;
+            color: rgba(255, 255, 255, .75);
+            font-size: .72rem;
+            outline: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .qr-copy-btn {
+            padding: 8px 16px;
+            border-radius: 10px;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            font-size: .75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .18s;
+            white-space: nowrap;
+        }
+
+        .qr-copy-btn:hover {
+            opacity: .85;
+        }
+
+        .qr-close-btn {
+            padding: 6px 24px;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .15);
+            color: rgba(255, 255, 255, .6);
+            font-size: .75rem;
+            cursor: pointer;
+            transition: background .2s;
+        }
+
+        .qr-close-btn:hover {
+            background: rgba(255, 255, 255, .18);
+            color: #fff;
+        }
+
         /* ===== 功能I：自訂標籤管理 Modal ===== */
         #tag-manage-modal {
             display: none;
@@ -1953,8 +2078,23 @@
         <p class="panel-hint">鍵盤 ← → ↑ ↓ ｜ 圖片自動儲存於瀏覽器</p>
     </div>
 
+    <!-- ===== QR Code 分享 Modal ===== -->
+    <div id="qr-modal">
+        <div class="qr-box">
+            <div class="qr-title">🔗 掃描 QR Code 分享畫廊</div>
+            <p class="qr-subtitle">用手機相機掃描，立即開啟 3D 畫廊！</p>
+            <div id="qr-canvas-wrap"></div>
+            <div class="qr-url-row">
+                <input class="qr-url-input" id="qr-url-input" readonly>
+                <button class="qr-copy-btn" id="qr-copy-btn">📋 複製</button>
+            </div>
+            <button class="qr-close-btn" id="qr-close-btn">關閉</button>
+        </div>
+    </div>
+
     <!-- ===== 縮圖帶 ===== -->
     <div id="thumb-strip"></div>
+
 
     <!-- ===== 功能U：版型設定抽屜 ===== -->
     <div id="layout-drawer">
@@ -2254,17 +2394,58 @@
         })();
 
         // 分享按鈕：產生公開連結並複製到剪貼簿
+        // QR Code Modal 邏輯
+        const qrModal = document.getElementById('qr-modal');
+        const qrWrap = document.getElementById('qr-canvas-wrap');
+        const qrUrlInput = document.getElementById('qr-url-input');
+        const qrCopyBtn = document.getElementById('qr-copy-btn');
+        const qrCloseBtn = document.getElementById('qr-close-btn');
+        let _qrInstance = null;
+
+        function openQrModal(url) {
+            qrUrlInput.value = url;
+
+            // 清除舊 QR Code
+            qrWrap.innerHTML = '';
+            _qrInstance = null;
+
+            try {
+                _qrInstance = new QRCode(qrWrap, {
+                    text: url,
+                    width: 200,
+                    height: 200,
+                    colorDark: '#1a1a2e',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            } catch (e) {
+                // fallback：用 Google Charts API
+                const img = document.createElement('img');
+                img.src = `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+                img.width = 200; img.height = 200;
+                qrWrap.appendChild(img);
+            }
+
+            qrModal.classList.add('show');
+        }
+
+        qrCloseBtn.addEventListener('click', () => qrModal.classList.remove('show'));
+        qrModal.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.classList.remove('show'); });
+
+        qrCopyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(qrUrlInput.value).then(() => {
+                qrCopyBtn.textContent = '✅ 已複製！';
+                setTimeout(() => qrCopyBtn.textContent = '📋 複製', 1800);
+            });
+        });
+
         shareLinkBtn.addEventListener('click', () => {
             if (!currentUser) {
                 showBanner('⚠️ 請先登入才能分享', true); return;
             }
             const tag = activeTag !== '全部' ? `&tag=${encodeURIComponent(activeTag)}` : '';
             const url = `${location.origin}${location.pathname}?view=${currentUser.uid}${tag}`;
-            navigator.clipboard.writeText(url).then(() => {
-                showBanner('🔗 分享連結已複製！', false);
-            }).catch(() => {
-                prompt('請手動複製下方連結：', url);
-            });
+            openQrModal(url);
         });
 
         // 唯讀頁面複製按鈕
