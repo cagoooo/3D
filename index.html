@@ -27,12 +27,12 @@
 
         // ★ Firebase 設定由 GitHub Actions inject.py 注入（佔位符，勿填真實值）
         const firebaseConfig = {
-            apiKey: "",
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: ""
+            apiKey: "AIzaSyDGGD24GfSUcPrXbgoi0OSHogXR_wfVrNA",
+            authDomain: "smes-e1dc3.firebaseapp.com",
+            projectId: "smes-e1dc3",
+            storageBucket: "smes-e1dc3.firebasestorage.app",
+            messagingSenderId: "626362737802",
+            appId: "1:626362737802:web:5437ee537f575edec97973"
         };
 
 
@@ -947,7 +947,12 @@
             border-radius: 20px;
             backdrop-filter: blur(10px);
             border: 1px solid var(--panel-border);
-            transition: background 0.6s;
+            transition: background 0.6s, opacity 0.8s ease;
+        }
+
+        /* 自動淡出狀態 */
+        .control-panel.panel-dim {
+            opacity: 0.15;
         }
 
         .btn-row {
@@ -3371,6 +3376,42 @@
 
         // Firebase 初始化（帶延遲等待模組）
         initFirebase();
+
+        // ── 控制面板自動淡出（5秒後淡至半透明，hover 恢復）────────────────
+        const _panel = document.querySelector('.control-panel');
+        let _panelTimer = null;
+
+        function panelStartTimer() {
+            clearTimeout(_panelTimer);
+            _panelTimer = setTimeout(() => {
+                _panel.classList.add('panel-dim');
+            }, 5000);
+        }
+
+        function panelWake() {
+            _panel.classList.remove('panel-dim');
+            panelStartTimer();
+        }
+
+        // 滑鼠進入面板時恢復
+        _panel.addEventListener('mouseenter', () => {
+            _panel.classList.remove('panel-dim');
+            clearTimeout(_panelTimer);
+        });
+
+        // 滑鼠離開面板後重新開始計時
+        _panel.addEventListener('mouseleave', panelStartTimer);
+
+        // 任何滑鼠移動都重置計時（讓整體互動時不淡出）
+        document.addEventListener('mousemove', panelWake, { passive: true });
+
+        // 觸控裝置：觸碰時恢復
+        document.addEventListener('touchstart', panelWake, { passive: true });
+
+        // 頁面載入後開始第一次計時
+        panelStartTimer();
+        // ──────────────────────────────────────────────────────────────────
+
     </script>
 
     <!-- 功能AE：批次上傳進度條 -->
