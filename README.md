@@ -231,9 +231,9 @@ https://你的帳號.github.io/3d-gallery/
 ---
 
 
-## ✅ 已完成進度總表（v8.1 截止）
+## ✅ 已完成進度總表（v9.0 截止）
 
-> 最後更新：2026-03-06（v8.1 完成 3D 視覺全面升級）
+> 最後更新：2026-03-06（v9.0 完成 v9.0 UX 精修全系列）
 
 ---
 
@@ -294,18 +294,25 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **功能 Y** 公開分享連結 + 唯讀畫廊模式（`?view=UID` URL 解析，`body.readonly-mode`）
 - [x] **功能 AA** Firestore 公開相簿規則 + 🌐 公開 / 非公開切換按鈕
 
-### 🟤 v8.0：雲端管理完整化（最新）
-- [x] **登入自動還原**：`onAuthStateChanged` 後自動呼叫 `loadFromCloud()`，Firestore + Storage URL 完整還原，存入 localStorage
-- [x] **📲 手動從雲端還原按鈕**：右上角藍色按鈕，任意時刻觸發
-- [x] **🗑️ 一鍵刪除全部照片**：確認 Modal（毛玻璃）→ 批次刪 Firestore → `listAll` + `deleteObject` 清空 Storage → 清除本機
-- [x] **進度 Overlay 整合**：雲端還原 / 同步 / 刪除共用同一套動態進度框，顯示即時計數
+### 🟤 v8.0：雲端管理完整化
+- [x] **登入自動還原**：`onAuthStateChanged` 後自動呼叫 `loadFromCloud()`
+- [x] **📲 手動從雲端還原按鈕**：右上角藍色按鈕，任意時刻觸
+- [x] **🗑️ 一鍵刪除全部照片**：確認 Modal → 批次刪 Firestore + Storage
+- [x] **進度 Overlay 整合**：雲端還原 / 同步 / 刪除共用同一套動態進度框
 - [x] **同步鎖機制**：`isSyncing` 旗標防止同步中途登出導致 403 錯誤
-- [x] **更完善的錯誤處理**：各操作均有獨立的 catch 與 Banner 提示
 
-### ✨ v8.1：3D 視覺全面升級（最新）
-- [x] **多排圓圈排列**：80 張以上照片自動分成多排垂直排列，每排半徑受透視深度上限（72%）保護，徹底消滅後排反面問題
-- [x] **深度暗化效果**：`applyTransform()` 每幀依各卡片面向角動態更新 `brightness()`，前排全亮（1.0）後排漸暗（0.3），圓圈立體感大幅提升
-- [x] **🎥 沉浸模式切換**：紫色發光按鈕一鍵切換（卡片 420×600px + 透視 750px），形成環繞全景效果；退出自動還原原設定
+### ✨ v8.1：3D 視覺全面升級
+- [x] **多排圓圈排列**：80 張以上照片自動分成多排垂直排列
+- [x] **深度暗化效果**：`applyTransform()` 每幀依各卡片面向角動態更新 `brightness()`，前排全亮（1.0）後排漸暗（0.3）
+- [x] **🎥 沉浸模式切換**：紫色發光按鈕一鍵切換（420×600px + 透視 750px）
+
+### 🚀 v9.0：UX 精修全系列（最新完成）
+- [x] **手機版折疊面板**：控制面板改為 `position:fixed bottom:0` 可折疊底部抽屜，點擊把手展開/折疊，旋轉畫廊時自動折疊
+- [x] **雙指 Pinch 縮放**：`touchstart/touchmove` 偵測兩指距離，映射至 `perspective` 400~3000px，與滾輪縮放同步
+- [x] **AS 旋轉靈敏度細調**：版型抽屜新增拖曳靈敏（0.2x~2.5x）、觸控靈敏（獨立設定）、鍵盤步進（1~5排）三個滑桿
+- [x] **AT 卡片陰影深度動畫**：`applyTransform()` 同步計算 `box-shadow`，前排深陰影、後排幾乎無陰影，搭配亮度暗化立體感更强
+- [x] **AU 五情境預設**：版型抽屜頂部五顆按鈕（🎠標準 / 🎥沉浸 / 🗂精選 / 🖼藝廊 / 📸橫幅），選中金色高亮，同步更新三個滑桿
+- [x] **批次上傳進度條**（AE）：頂部 4px 細條進度條，完成後自動消失
 
 ---
 
@@ -970,12 +977,218 @@ src/
 | v11.0+ | AP | PWA 完整離線支援 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AQ | 相簿統計儀表板 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AR | Vite + React + TS 重構 | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
-| v9.0 | AS | 旋轉靈敏度 + 鍵盤步進細調 | ⭐ | ⭐ | ⭐⭐⭐ | 💡 優化 |
-| v9.0 | AT | 卡片陰影深度動畫 | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | 💡 優化 |
-| v9.0 | AU | 沉浸模式多情境預設 | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 💡 優化 |
-| v10.0 | AV | 卡片自動對焦高亮 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+## 📊 完整開發優先建議矩陣（v9.0 更新）
+
+| 版本 | ID | 功能名稱 | 難度 | 視覺 | 效益 | 狀態 |
+|---|---|---|---|---|---|---|
+| v1.0～v4.1 | — | 核心 + 雲端 + CI/CD | ⭐～⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v5.0 | A B C D | 視差 / 粒子 / 縮圖 / 翻轉 | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ 已完成 |
+| v6.0 | E F G H I | 拖曳 / 行內編輯 / 壓縮 / 批次 / 標籤 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v7.0 | U W Y AA | 版型 / 波浪 / 公開連結 / 公開規則 | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v8.0 | — | 自動還原 + 手動還原 + 一鍵刪除 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v8.1 | — | 多排圓圈 + 深度暗化 + 沉浸模式 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| **v9.0** | **—** | **手機折疊面板 + Pinch 縮放** | **⭐⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 最新完成** |
+| **v9.0** | **AE** | **批次上傳進度條** | **⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.0** | **AS** | **旋轉靈敏度細調（拖曳/觸控/鍵盤）** | **⭐** | **⭐** | **⭐⭐⭐** | **✅ 已完成** |
+| **v9.0** | **AT** | **卡片陰影深度動畫** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐** | **✅ 已完成** |
+| **v9.0** | **AU** | **沉浸模式五情境預設** | **⭐⭐** | **⭐⭐⭐⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
+| v9.0 | AB | EXIF 自動日期 / 相機型號 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🔥 最優先 |
+| v9.0 | AC | 即時關鍵字搜尋 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🔥 最優先 |
+| v9.0 | AD | 幻燈片播放模式 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 🔥 最優先 |
+| v9.0 | AF | 多維度排序選項 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.0 | AG | 備份匯出 ZIP | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
+| v9.0 | AV | 卡片自動對焦 Snap | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v10.0 | AH | 相簿封面 / 個人資料頁 | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AI | 圖片按讚 / 收藏 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AJ | 評分系統（★） | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | 📅 中期 |
+| v10.0 | AK | 多人協作共享相簿 | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AL | 圖片濾鏡 / 色調調整 | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AM | 地圖模式（Leaflet.js） | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | AN | AI 自動命名（Gemini Vision） | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
 | v10.0 | AW | 語音控制（Web Speech API） | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | 📅 中期 |
+| v11.0+ | AO | 旋轉動畫匯出 WebM | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 🚀 長期 |
+| v11.0+ | AP | PWA 完整離線支援 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
+| v11.0+ | AQ | 相簿統計儀表板 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 🚀 長期 |
+| v11.0+ | AR | Vite + React + TS 重構 | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AX | 相片水印 / 版權標記 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
+
+---
+
+## 🆕 全新功能建議（v10.0 補充）
+
+---
+
+### AY. 卡片自動對焦 Snap（慣性停止後吸附最近卡）
+
+> **難度**：⭐⭐｜**效益**：停止後不再卡在兩張之間，操控感和精準度大提升
+
+```js
+function snapToNearest() {
+    const step = theta || 45;
+    const nearest = Math.round(currentRotationY / step) * step;
+    carousel.style.transition = 'transform 0.35s cubic-bezier(.2,.8,.2,1)';
+    currentRotationY = nearest;
+    applyTransform();
+}
+// 在 applyInertia 末段速度趨近 0 時呼叫
+if (Math.abs(velocityX) < 0.06 && Math.abs(velocityY) < 0.06) {
+    snapToNearest(); 
+}
+```
+
+**同時加入「正面高亮」**：前方卡片 `outline: 2px solid rgba(255,255,255,.5)`，其餘不高亮，視覺焦點更清晰。
+
+---
+
+### AZ. 多主題光源方向控制
+
+> **難度**：⭐⭐｜**效益**：版型抽屜加入光源角度滑桿，光影立體感再升級
+
+在版型抽屜加入「💡 光源角度」滑桿（0°～360°）：
+
+```js
+// 光源方向影響 brightness 計算的 cos 參考點
+const lightOffset = layoutCfg.lightAngle || 0; // 度數
+const effAngle = (((base + currentRotationY + lightOffset) % 360) + 360) % 360;
+const bright = 0.3 + 0.7 * ((Math.cos(effAngle * Math.PI / 180) + 1) / 2);
+```
+
+- 預設 0°（光從正前方照）→ 270° 可模擬「右側光源」，前右方卡片最亮
+
+---
+
+### BA. 快速跳至指定卡片（直接輸入編號）
+
+> **難度**：⭐｜**效益**：100 張相簿的使用者超需要，立刻定位特定照片
+
+```js
+// Ctrl+G 或按鈕彈出
+const jumpModal = document.getElementById('jump-modal');
+const jumpInput = document.getElementById('jump-input');
+
+function jumpToCard(idx) {
+    if (idx < 0 || idx >= filteredData.length) return;
+    const step = theta || 45;
+    currentRotationY = -idx * step;
+    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)';
+    applyTransform();
+}
+```
+
+- 在控制面板加入小型「# 跳至」輸入框，輸入數字按 Enter 瞬間旋轉到目標卡
+- 僅在圖片數 ≥ 10 張時顯示此入口
+
+---
+
+### BB. 縮圖帶橫向捲動改良（虛擬捲動 + 滑動吸附）
+
+> **難度**：⭐⭐⭐｜**效益**：500 張相簿的縮圖帶不再卡頓，效能飛升
+
+目前所有縮圖全部渲染，張數多時 DOM 壓力大。改用虛擬捲動（Intersection Observer）：
+
+```js
+// 只 render 可視視窗 ±5 張的縮圖
+function updateVisibleThumbs() {
+    const scrollLeft = thumbStrip.scrollLeft;
+    const thumbW = 52; // 每個縮圖寬度含 gap
+    const startIdx = Math.max(0, Math.floor(scrollLeft / thumbW) - 5);
+    const endIdx   = Math.min(filteredData.length, startIdx + visibleCount + 10);
+    // 只渲染 startIdx～endIdx 範圍的縮圖元素
+}
+```
+
+---
+
+### BC. 手機版左右輕掃切換到下一排（Y 軸翻頁）
+
+> **難度**：⭐⭐｜**效益**：多排相簿時，手機用戶可用上下滑換排，配合折疊面板更自然
+
+```js
+// 雙指垂直滑動 → 切換顯示排次
+document.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) return; // 避免與 Pinch 衝突
+    const dy = e.touches[0].pageY - touchStartY;
+    if (Math.abs(dy) > 60) { // 閾值 60px
+        const dir = dy < 0 ? 1 : -1; // 向上滑 = 下一排
+        currentRow = Math.max(0, Math.min(totalRows - 1, currentRow + dir));
+        // 套用對應排的 Y 偏移
+    }
+});
+```
+
+---
+
+### BD. 版型設定雲端跨裝置同步（含靈敏度）
+
+> **難度**：⭐⭐｜**效益**：換手機開畫廊時，不必重新調整版型，體驗一致
+
+目前 `saveLayoutToCloud()` 只儲存 `w / h / persp / speed`。補上新欄位：
+
+```js
+layout: {
+    w: layoutCfg.w,
+    h: layoutCfg.h,
+    persp: layoutCfg.persp,
+    speed: autoRotateSpeed,
+    dragSens:  layoutCfg.dragSens  || 1.0,   // AS
+    touchSens: layoutCfg.touchSens || 1.0,   // AS
+    keySens:   layoutCfg.keySens   || 1,     // AS
+    lightAngle: layoutCfg.lightAngle || 0,   // AZ
+}
+```
+
+---
+
+### BE. 主題色自訂（Hue 旋鈕）
+
+> **難度**：⭐⭐｜**效益**：從 5 個固定主題升級到 360° 無限自訂色系，高質感個人化
+
+在主題按鈕列加入一個色相旋鈕（`<input type="range" min="0" max="360">`）：
+
+```js
+function applyCustomHue(hue) {
+    document.documentElement.style.setProperty('--accent', `hsl(${hue}, 70%, 60%)`);
+    document.documentElement.style.setProperty('--accent2', `hsl(${(hue+30)%360}, 60%, 50%)`);
+    // 粒子顏色同步更新
+    particleColor = `hsl(${hue}, 70%, 60%)`;
+}
+```
+
+---
+
+### BF. 卡片懸停 3D 傾斜光澤（Tilt Effect）
+
+> **難度**：⭐⭐⭐｜**效益**：游標在卡片上時產生細緻的動態光澤感，質感大幅提升
+
+```js
+card.addEventListener('mousemove', e => {
+    if (editMode) return;
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;   // -0.5 ～ 0.5
+    const y = (e.clientY - rect.top)  / rect.height - 0.5;
+    const rotX =  y * -12; // 最大 12°
+    const rotY =  x *  12;
+    card.style.transform = 
+        `translateZ(${cardTranslateZ}px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    // 光澤層跟著游標移動
+    const gloss = card.querySelector('.card-gloss');
+    if (gloss) gloss.style.background = 
+        `radial-gradient(circle at ${(x+0.5)*100}% ${(y+0.5)*100}%, rgba(255,255,255,.18), transparent 65%)`;
+});
+card.addEventListener('mouseleave', () => {
+    card.style.transform = `translateZ(${cardTranslateZ}px)`;
+});
+```
+
+**CSS**：
+```css
+.card-gloss {
+    position: absolute; inset: 0;
+    border-radius: 12px;
+    pointer-events: none;
+    transition: background 0.1s ease;
+}
+```
 
 ---
 
