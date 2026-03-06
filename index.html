@@ -1710,7 +1710,7 @@
             bottom: 18px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(15, 23, 42, .9);
+            background: rgba(15, 23, 42, .92);
             border: 1px solid rgba(255, 255, 255, .12);
             border-radius: 12px;
             padding: 8px 18px;
@@ -1720,19 +1720,60 @@
             backdrop-filter: blur(12px);
             gap: 10px;
             align-items: center;
+            flex-wrap: nowrap;
+            /* 不換行 */
+            white-space: nowrap;
+            max-width: calc(100vw - 32px);
+            box-sizing: border-box;
         }
 
         #share-bar.visible {
             display: flex;
         }
 
+        #share-bar>span {
+            flex-shrink: 0;
+            /* 「👁 唯讀相簿」不縮 */
+        }
+
         #share-bar strong {
             color: #e2e8f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            /* 名稱太長則賭...取代 */
+            white-space: nowrap;
+            max-width: 38vw;
+            /* 手機限寬，超出截斷 */
+            flex-shrink: 1;
         }
 
         #share-bar a {
             color: var(--accent);
             text-decoration: none;
+        }
+
+        /* 手機：按鈕只顯示圖示 */
+        @media (max-width: 480px) {
+            #share-bar {
+                padding: 7px 14px;
+                font-size: .72rem;
+                bottom: 12px;
+                gap: 8px;
+            }
+
+            #share-bar>span {
+                display: none;
+                /* 隱藏「👁 唯讀」文字，節省空間 */
+            }
+
+            #share-bar strong {
+                max-width: 45vw;
+            }
+
+            #share-copy-btn {
+                padding: 4px 10px !important;
+                font-size: .7rem !important;
+            }
         }
 
         #share-link-btn {
