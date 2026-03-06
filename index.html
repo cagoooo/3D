@@ -1804,6 +1804,31 @@
             background: rgba(255, 255, 255, .12);
         }
 
+        /* AU: 情境預設小按鈕 */
+        .scene-preset-btn {
+            padding: 4px 9px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, .18);
+            background: rgba(255, 255, 255, .07);
+            color: #cbd5e1;
+            font-size: .68rem;
+            cursor: pointer;
+            transition: background .18s, border-color .18s, color .18s;
+            white-space: nowrap;
+        }
+
+        .scene-preset-btn:hover {
+            background: rgba(255, 255, 255, .14);
+            color: #fff;
+        }
+
+        .scene-preset-btn.active {
+            background: rgba(251, 191, 36, .22);
+            border-color: rgba(251, 191, 36, .55);
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
         /* ===== 功能Y：唯讀模式 ===== */
         body.readonly-mode .control-panel,
         body.readonly-mode #tag-manage-modal,
@@ -2352,22 +2377,49 @@
         <button id="layout-toggle-btn" title="版型設定">⚙</button>
         <div class="layout-title">版型設定</div>
 
+        <!-- AU: 情境預設快速切換 -->
+        <div class="layout-row" style="flex-direction:column;gap:6px;">
+            <label>🎨 情境預設</label>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button class="scene-preset-btn" data-preset="standard" title="260×380  1200px">🎠 標準</button>
+                <button class="scene-preset-btn" data-preset="immersive" title="420×600  750px">🎥 沈浸</button>
+                <button class="scene-preset-btn" data-preset="compact" title="180×260  1600px">🗂 精選</button>
+                <button class="scene-preset-btn" data-preset="gallery" title="320×480  900px">🖼 藝廊</button>
+                <button class="scene-preset-btn" data-preset="wide" title="540×305  1400px">📸 橫幅</button>
+            </div>
+        </div>
+
         <div class="layout-row">
             <label>卡片寬度 <span id="lv-width-val">260px</span></label>
-            <input id="lv-width" type="range" min="140" max="400" value="260" step="10">
+            <input id="lv-width" type="range" min="140" max="600" value="260" step="10">
         </div>
         <div class="layout-row">
             <label>卡片高度 <span id="lv-height-val">380px</span></label>
-            <input id="lv-height" type="range" min="200" max="560" value="380" step="10">
+            <input id="lv-height" type="range" min="200" max="700" value="380" step="10">
         </div>
         <div class="layout-row">
             <label>透視深度 <span id="lv-persp-val">1200px</span></label>
-            <input id="lv-persp" type="range" min="600" max="3000" value="1200" step="50">
+            <input id="lv-persp" type="range" min="400" max="3200" value="1200" step="50">
         </div>
         <div class="layout-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08);">
             <label>🔄 旋轉速度 <span id="lv-speed-val">0.25度/幀</span></label>
             <input id="lv-speed" type="range" min="0.05" max="1.0" value="0.25" step="0.05">
         </div>
+
+        <!-- AS: 靈敏度細調 -->
+        <div class="layout-row" style="margin-top:6px;">
+            <label>🖱 拖曳靈敏 <span id="lv-drag-val">1.0x</span></label>
+            <input id="lv-drag" type="range" min="0.2" max="2.5" value="1.0" step="0.1">
+        </div>
+        <div class="layout-row">
+            <label>📱 觸控靈敏 <span id="lv-touch-val">1.0x</span></label>
+            <input id="lv-touch" type="range" min="0.2" max="2.5" value="1.0" step="0.1">
+        </div>
+        <div class="layout-row">
+            <label>⌨ 鍵盤步進 <span id="lv-key-val">1排</span></label>
+            <input id="lv-key" type="range" min="1" max="5" value="1" step="1">
+        </div>
+
         <button class="layout-reset-btn" id="lv-reset">↺ 還原預設</button>
     </div>
 
@@ -2574,7 +2626,69 @@
             applyLayoutCfg(true); // true = 需要重建畫廊
             saveLayoutToCloud();
             showBanner('↺ 版型已還原預設', false);
+            // 同步靈敏度滑桿顯示
+            lvDrag.value = 1.0; lvDragVal.textContent = '1.0x';
+            lvTouch.value = 1.0; lvTouchVal.textContent = '1.0x';
+            lvKey.value = 1; lvKeyVal.textContent = '1排';
         });
+
+        // ── AU: 情境預設按鈕 ─────────────────────────────────────────
+        const SCENE_PRESETS = {
+            standard: { w: 260, h: 380, persp: 1200 },
+            immersive: { w: 420, h: 600, persp: 750 },
+            compact: { w: 180, h: 260, persp: 1600 },
+            gallery: { w: 320, h: 480, persp: 900 },
+            wide: { w: 540, h: 305, persp: 1400 },
+        };
+        const presetLabels = {
+            standard: '🎠 標準', immersive: '🎥 沈浸',
+            compact: '🗂 精選', gallery: '🖼 藝廊', wide: '📸 橫幅'
+        };
+
+        document.querySelectorAll('.scene-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = SCENE_PRESETS[btn.dataset.preset];
+                if (!p) return;
+                layoutCfg.w = p.w; layoutCfg.h = p.h; layoutCfg.persp = p.persp;
+                // 同步三個滑桿
+                lvWidth.value = p.w; lvWidthVal.textContent = p.w + 'px';
+                lvHeight.value = p.h; lvHeightVal.textContent = p.h + 'px';
+                lvPersp.value = p.persp; lvPerspVal.textContent = p.persp + 'px';
+                applyLayoutCfg(true);
+                saveLayoutToCloud();
+                // 高亮選中預設
+                document.querySelectorAll('.scene-preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                showBanner(`${presetLabels[btn.dataset.preset]} 情境已套用`, false);
+            });
+        });
+
+        // ── AS: 靈敏度滑桿 ────────────────────────────────────────────
+        const lvDrag = document.getElementById('lv-drag');
+        const lvTouch = document.getElementById('lv-touch');
+        const lvKey = document.getElementById('lv-key');
+        const lvDragVal = document.getElementById('lv-drag-val');
+        const lvTouchVal = document.getElementById('lv-touch-val');
+        const lvKeyVal = document.getElementById('lv-key-val');
+
+        if (lvDrag) {
+            lvDrag.addEventListener('input', () => {
+                layoutCfg.dragSens = parseFloat(lvDrag.value);
+                lvDragVal.textContent = parseFloat(lvDrag.value).toFixed(1) + 'x';
+            });
+        }
+        if (lvTouch) {
+            lvTouch.addEventListener('input', () => {
+                layoutCfg.touchSens = parseFloat(lvTouch.value);
+                lvTouchVal.textContent = parseFloat(lvTouch.value).toFixed(1) + 'x';
+            });
+        }
+        if (lvKey) {
+            lvKey.addEventListener('input', () => {
+                layoutCfg.keySens = parseInt(lvKey.value);
+                lvKeyVal.textContent = lvKey.value + '排';
+            });
+        }
 
         // ── 版型設定自動儲存到雲端(防抖 1.5s)，方案B ───────────────
         let _saveLayoutTimer = null;
@@ -3338,16 +3452,18 @@
             const pY = isDragging ? 0 : parallaxY;
             carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
 
-            // ── 深度暗化：依各卡片面向角動態調整亮度 ──────────────────
-            // 公式：前排 (cos≈1) → brightness 1.0；後排 (cos≈-1) → brightness 0.3
+            // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
             galleryCards.forEach(card => {
                 const base = parseFloat(card.dataset.baseAngle || 0);
                 const eff = (((base + currentRotationY) % 360) + 360) % 360;
                 const rad = eff * Math.PI / 180;
                 const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+                // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
+                const shadowBlur = Math.round(bright * 28);
+                const shadowAlpha = (bright * 0.55).toFixed(2);
                 card.style.filter = `brightness(${bright.toFixed(2)})`;
+                card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
             });
-            // ─────────────────────────────────────────────────────────────
         }
         function applyInertia() {
             if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
@@ -3370,11 +3486,16 @@
             carousel.style.transition = 'none';
         }
         function handleDragMove(e) {
-            if (!isDragging || lbOpen) return;
-            const cx = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
-            const cy = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
-            velocityX = (cx - prevX) * 0.4;
-            velocityY = (cy - prevY) * 0.2;
+            if (!isDragging || lbOpen || isPinching) return;
+            const isTouch = e.type.includes('touch');
+            const cx = isTouch ? e.touches[0].pageX : e.pageX;
+            const cy = isTouch ? e.touches[0].pageY : e.pageY;
+            // AS: 拖曳 / 觸控分別靈敏度
+            const sens = isTouch
+                ? (layoutCfg.touchSens ?? 1.0)
+                : (layoutCfg.dragSens ?? 1.0);
+            velocityX = (cx - prevX) * 0.4 * sens;
+            velocityY = (cy - prevY) * 0.2 * sens;
             currentRotationY += velocityX; currentRotationX += velocityY;
             applyTransform(); prevX = cx; prevY = cy;
         }
@@ -3447,13 +3568,15 @@
                 if (e.key === 'Escape') closeLightbox();
                 return;
             }
-            const step = theta || 45;
+            // AS: 鍵盤步進套用 keySens 倍率（1～5 排）
+            const keySens = layoutCfg.keySens || 1;
+            const step = (theta || 45) * keySens;
             switch (e.key) {
                 case 'ArrowLeft': e.preventDefault(); cancelAnimationFrame(animationFrameId);
-                    currentRotationY = Math.round(currentRotationY / step) * step - step;
+                    currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) - step;
                     carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
                 case 'ArrowRight': e.preventDefault(); cancelAnimationFrame(animationFrameId);
-                    currentRotationY = Math.round(currentRotationY / step) * step + step;
+                    currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) + step;
                     carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
                 case 'ArrowUp': e.preventDefault();
                     currentRotationX = Math.max(-40, currentRotationX - 8);
