@@ -2380,7 +2380,7 @@
         let isAutoRotating = true;
         let autoRotateRafId = null;      // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;      // 自動旋轉速度（度/幀），可調整
-        let numImages = 0, theta = 0;
+        let numImages = 0, theta = 0, perRowGlobal = 1;
         let lbCurrentIndex = 0, lbOpen = false;
 
         // 上傳暫存（等待 Modal 確認）
@@ -2863,16 +2863,22 @@
             numImages = filteredData.length;
             if (!numImages) { carousel.innerHTML = '<p style="color:rgba(255,255,255,.3);font-size:.8rem;text-align:center;margin-top:140px;">此分類暫無圖片</p>'; return; }
 
-            theta = 360 / numImages;
-            // 正確半徑公式：由卡片寬度和張數決定，保證不重疊
-            // r = (cardW + gap) / (2 * sin(π/n))
             const cardW = parseFloat(
                 getComputedStyle(document.documentElement).getPropertyValue('--card-w')
             ) || 260;
-            const GAP = 24; // 卡片間距（px）
-            const r = numImages <= 1
-                ? 0
-                : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / numImages)));
+            const GAP = 24;     // 卡片水平間距（px）
+            const ROW_GAP = 30; // 排與排之間垂直間距（px）
+
+            // ── 多排圓圈計算 ────────────────────────────────────
+            // 半徑上限：不超過透視深度的 72%，防止後排卡片超越攝影機導致翻轉
+            const MAX_R = Math.min(perspective * 0.72, 3600);
+            // 依 MAX_R 計算每排最多幾張（圓周 / 卡片佔位）
+            const maxPerRow = numImages <= 1
+                ? 1
+                : Math.max(3, Math.floor(2 * Math.PI * MAX_R / (cardW + GAP)));
+            const perRow = Math.min(numImages, maxPerRow);
+            const rowCount = Math.ceil(numImages / perRow);
+            // ────────────────────────────────────────────────────
 
             filteredData.forEach((data, i) => {
                 const item = document.createElement('div');
@@ -3005,7 +3011,20 @@
 
                 inner.appendChild(front); inner.appendChild(back);
                 item.appendChild(inner);
-                item.style.transform = `rotateY(${theta * i}deg) translateZ(${r}px)`;
+                // ── 計算本張卡片屬於第幾排、該排第幾格 ──
+                const row = Math.floor(i / perRow);
+                const colInRow = i % perRow;
+                // 最後一排可能不滿，需重算該排實際數量
+                const colsInThisRow = (row < rowCount - 1)
+                    ? perRow
+                    : ((numImages % perRow) || perRow);
+                const thetaInRow = 360 / colsInThisRow;
+                const rInRow = colsInThisRow <= 1
+                    ? 0
+                    : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / colsInThisRow)));
+                // 垂直偏移：多排垂直置中
+                const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
+                item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3013,6 +3032,10 @@
                 });
                 carousel.appendChild(item);
             });
+
+            // 同步全域 theta / perRowGlobal 供鍵盤步進和縮圖點擊使用
+            theta = 360 / perRow;
+            perRowGlobal = perRow;
 
             // 重建縮圖帶
             buildThumbStrip();
@@ -3719,7 +3742,7 @@
                 num.className = 'thumb-num'; num.textContent = i + 1;
                 el.appendChild(img); el.appendChild(num);
                 el.addEventListener('click', () => {
-                    currentRotationY = -(theta * i);
+                    currentRotationY = -((i % perRowGlobal) * theta);
                     carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
                     applyTransform();
                     updateThumbActive(i);
