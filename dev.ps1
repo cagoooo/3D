@@ -1,44 +1,42 @@
-# =============================================
-# dev.ps1 — 本地開發腳本
-# 使用方式：在 H:\3D 目錄執行 .\dev.ps1
-# =============================================
+# dev.ps1 - Local development server with Firebase config injection
+# Usage: .\dev.ps1
 
-# 1. 讀取 .env 並設定環境變數
 if (-not (Test-Path ".env")) {
-    Write-Host "❌ 找不到 .env 檔，請先建立 .env" -ForegroundColor Red
+    Write-Host "ERROR: .env not found" -ForegroundColor Red
     exit 1
 }
 
+# Load .env into environment variables
 Get-Content ".env" | Where-Object { $_ -notmatch "^#" -and $_ -match "=" } | ForEach-Object {
     $parts = $_ -split "=", 2
-    [System.Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim(), "Process")
-    Write-Host "  ✅ 載入 $($parts[0].Trim())" -ForegroundColor Green
+    $key = $parts[0].Trim()
+    $value = $parts[1].Trim()
+    [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
+    Write-Host "  OK: $key" -ForegroundColor Green
 }
 
-# 2. 備份原始 index.html
+# Backup original index.html
 Copy-Item "index.html" "index.html.bak" -Force
-Write-Host "`n📋 備份 index.html → index.html.bak" -ForegroundColor Cyan
+Write-Host "Backup: index.html -> index.html.bak" -ForegroundColor Cyan
 
-# 3. 注入 Firebase 設定
-python3 .github/inject.py 2>&1
-if ($LASTEXITCODE -ne 0) {
-    # 嘗試 python（Windows 常見）
-    python .github/inject.py
-}
-Write-Host "🔑 Firebase 設定注入完成" -ForegroundColor Cyan
+# Inject Firebase config via inject.py
+python .github/inject.py
+Write-Host "Injected Firebase config" -ForegroundColor Cyan
 
-# 4. 開啟瀏覽器並啟動伺服器
-Write-Host "`n🚀 啟動本地伺服器 http://localhost:5500" -ForegroundColor Cyan
-Write-Host "   按 Ctrl+C 停止伺服器`n" -ForegroundColor Gray
+# Start local server
+Write-Host ""
+Write-Host "Server: http://localhost:5500" -ForegroundColor Yellow
+Write-Host "Press Ctrl+C to stop" -ForegroundColor Gray
+Write-Host ""
 
-# 啟動伺服器（前景執行）
 try {
     python -m http.server 5500
-} finally {
-    # 5. 伺服器停止後，還原 index.html
+}
+finally {
+    # Restore original index.html on exit
     if (Test-Path "index.html.bak") {
         Copy-Item "index.html.bak" "index.html" -Force
         Remove-Item "index.html.bak" -Force
-        Write-Host "`n♻️  還原 index.html（移除 Firebase 明文設定）" -ForegroundColor Yellow
+        Write-Host "Restored: index.html (placeholders back)" -ForegroundColor Yellow
     }
 }
