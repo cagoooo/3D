@@ -1,0 +1,192 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================
+    // 🔧 共用輔助函式
+    // ============================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaffAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/artifacts/default-app-id/public/data/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/artifacts/default-app-id/public/data/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isRepairAdmin() {
+      return request.auth != null && (
+        request.auth.token.email in ['ipad@mail2.smes.tyc.edu.tw'] ||
+        (
+          exists(/databases/$(database)/documents/system/adminConfig) &&
+          request.auth.token.email in get(/databases/$(database)/documents/system/adminConfig).data.emails
+        )
+      );
+    }
+
+    function isValidRepair(data) {
+      return data.keys().hasAll([
+        'roomId', 'roomCode', 'roomName',
+        'category', 'itemType', 'description',
+        'priority', 'reporterName', 'status', 'createdAt'
+      ])
+      && data.roomId is string
+      && data.category is string
+      && data.description is string
+      && data.reporterName is string
+      && data.priority is string
+      && data.status is string
+      && data.description.size() > 0
+      && data.description.size() <= 1000
+      && data.reporterName.size() > 0
+      && data.reporterName.size() <= 50
+      && data.priority in ['low', 'normal', 'high', 'urgent']
+      && data.status == 'pending'
+      && data.category in ['IT', 'GENERAL'];
+    }
+
+    // ============================
+    // 🖼️ 【3D 畫廊】使用者圖片與設定
+    // ============================
+
+    // 🔑 輔助函式：確認目標用戶的相簿是否已公開
+    function isAlbumPublic(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)/profile/info)
+        && get(/databases/$(database)/documents/users/$(uid)/profile/info).data.isPublic == true;
+    }
+
+    // profile/info：
+    //   - 本人可讀寫
+    //   - ⚡ 任何人（包含未登入）皆可讀 info 文件（僅含 displayName / isPublic 等非敏感旗標）
+    //     這是必要的，因為判斷 isAlbumPublic() 需要能先讀到 profile/info
+    match /users/{uid}/profile/info {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 其他 profile 子文件（非 info）：僅本人
+    match /users/{uid}/profile/{doc} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 圖片清單：本人可讀寫；若相簿公開，任何人（包含未登入）可讀
+    match /users/{uid}/images/{imageId} {
+      allow read: if (request.auth != null && request.auth.uid == uid)
+        || isAlbumPublic(uid);
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ============================
+    // 👤 【修繕系統】管理員設定
+    // ============================
+    match /system/adminConfig {
+      allow read: if true;
+      allow write: if isRepairAdmin();
+    }
+
+    match /system/mapConfig {
+      allow read: if true;
+      allow write: if isRepairAdmin();
+    }
+
+    match /system/notificationConfig {
+      allow read: if true;
+      allow write: if isRepairAdmin();
+    }
+
+    // ============================
+    // 🔧 【修繕系統】報修單
+    // ============================
+    match /repairs/{repairId} {
+      allow read: if true;
+      allow create: if isValidRepair(request.resource.data);
+      allow update: if isRepairAdmin() || (
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'cancelled' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+      );
+      allow delete: if isRepairAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isRepairAdmin()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 500;
+        allow update, delete: if isRepairAdmin();
+      }
+    }
+
+    // ============================
+    // 🤖 【AI 客服系統】
+    // ============================
+    match /chats/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /knowledge/{doc} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /config/{doc} {
+      allow read, write: if false;
+    }
+
+    match /usage/{uid}/{rest=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ============================
+    // 🏫 【行政業務系統】
+    // ============================
+    match /artifacts/{appId}/public/data/{collection}/{docId} {
+      allow read: if isAuthenticated() && collection == 'users';
+      allow create: if isAuthenticated() && collection == 'users' && docId == request.auth.uid;
+      allow update: if isAuthenticated() && collection == 'users' && docId == request.auth.uid;
+      allow create, update, delete: if isAuthenticated() && collection == 'users' && isStaffAdmin();
+
+      allow read: if isAuthenticated() && collection == 'school_events';
+      allow create: if isAuthenticated() && collection == 'school_events';
+      allow update: if isAuthenticated() && collection == 'school_events';
+      allow delete: if isAuthenticated() && collection == 'school_events';
+
+      allow read, create: if isAuthenticated() && collection == 'tags';
+      allow update, delete: if isAuthenticated() && collection == 'tags' && isStaffAdmin();
+
+      allow read: if isAuthenticated() && collection == 'event_templates';
+      allow create: if isAuthenticated() && collection == 'event_templates';
+      allow update, delete: if isAuthenticated() && collection == 'event_templates'
+        && (resource.data.createdBy == request.auth.uid || isStaffAdmin());
+
+      allow read, create, update, delete: if isAuthenticated() && collection == 'reminders';
+    }
+
+    match /artifacts/{appId}/public/data/school_events/{eventId}/comments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isStaffAdmin());
+    }
+
+    match /line_api_stats/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /line_followers/{followerId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ============================
+    // 🚫 預設拒絕（安全兜底）
+    // ============================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

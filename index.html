@@ -1,0 +1,3389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專屬創意 3D 畫廊</title>
+    <!-- favicon - inline SVG 避免 404 -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+    <!-- 按鈕通用樣式（取代 Tailwind CDN，避免正式環境警告） -->
+
+
+    <!-- Firebase SDK (v10 模組化 CDN) -->
+    <script type="module">
+        // ================================================================
+        //  Firebase 設定（待填入） — 由 firebase_config.js 注入
+        //  PLACEHOLDER：請勿在此硬編碼 API Key
+        // ================================================================
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+            from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, listAll }
+            from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+        import { getFirestore, collection, doc, getDoc, setDoc, getDocs, deleteDoc, query, orderBy }
+            from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+        // ★ Firebase 設定由 GitHub Actions inject.py 注入（佔位符，勿填真實值）
+        const firebaseConfig = {
+            apiKey: "__FIREBASE_API_KEY__",
+            authDomain: "__FIREBASE_AUTH_DOMAIN__",
+            projectId: "__FIREBASE_PROJECT_ID__",
+            storageBucket: "__FIREBASE_STORAGE_BUCKET__",
+            messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+            appId: "__FIREBASE_APP_ID__"
+        };
+
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const storage = getStorage(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        // 將 Firebase 實例掛到 window 給主邏輯使用
+        window._fb = {
+            auth, storage, db, storageRef, uploadBytes, getDownloadURL,
+            deleteObject, listAll, collection, doc, getDoc, setDoc, getDocs, deleteDoc,
+            query, orderBy, GoogleAuthProvider, signInWithPopup, signOut,
+            onAuthStateChanged
+        };
+    </script>
+
+    <style>
+        /* ===== 按鈕通用樣式（替代 Tailwind CDN）===== */
+        .btn-gallery {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 1.1rem;
+            border-radius: 9999px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+            transition: background 0.2s ease, transform 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn-gallery:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-gallery:active {
+            transform: translateY(0);
+        }
+
+        .btn-emerald {
+            background: #065f46;
+        }
+
+        .btn-emerald:hover {
+            background: #047857;
+        }
+
+        .btn-slate {
+            background: #334155;
+        }
+
+        .btn-slate:hover {
+            background: #475569;
+        }
+
+        .btn-red {
+            background: #991b1b;
+        }
+
+        .btn-red:hover {
+            background: #b91c1c;
+        }
+
+        .btn-hidden {
+            display: none !important;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            color: #e5e7eb;
+            text-align: center;
+            margin: 0 0 0.2rem;
+        }
+
+        .panel-hint {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-align: center;
+            margin: 0 0 0.75rem;
+        }
+
+        .btn-upload {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 1.1rem;
+            border-radius: 9999px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #fff;
+            background: #1d4ed8;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+            transition: background 0.2s ease, transform 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn-upload:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-upload:active {
+            transform: translateY(0);
+        }
+
+        .btn-upload svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+        }
+
+        /* ===== CSS 主題變數（功能一：多主題）===== */
+        :root {
+            --bg-from: #1a1a2e;
+            --bg-to: #050505;
+            --accent: #3b82f6;
+            --panel-bg: rgba(255, 255, 255, 0.05);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --perspective: 1200px;
+            --card-w: 260px;
+            --card-h: 380px;
+        }
+
+        /* 5 套主題 */
+        [data-theme="cosmos"] {
+            --bg-from: #1a1a2e;
+            --bg-to: #050505;
+            --accent: #6366f1;
+        }
+
+        [data-theme="sunset"] {
+            --bg-from: #3d1500;
+            --bg-to: #1a0000;
+            --accent: #f97316;
+        }
+
+        [data-theme="forest"] {
+            --bg-from: #0a2a18;
+            --bg-to: #050f08;
+            --accent: #22c55e;
+        }
+
+        [data-theme="rose"] {
+            --bg-from: #2a0a2a;
+            --bg-to: #0f050f;
+            --accent: #ec4899;
+        }
+
+        [data-theme="gold"] {
+            --bg-from: #1e1700;
+            --bg-to: #050400;
+            --accent: #eab308;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-to);
+            background-image: radial-gradient(circle at center, var(--bg-from) 0%, var(--bg-to) 100%);
+            transition: background-color 0.6s ease, background-image 0.6s ease;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            touch-action: none;
+        }
+
+        /* ===== 3D 場景 ===== */
+        .scene {
+            width: 100vw;
+            height: 100vh;
+            perspective: var(--perspective);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* ===== 旋轉木馬 ===== */
+        .carousel {
+            width: var(--card-w, 260px);
+            height: var(--card-h, 380px);
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.1s ease-out;
+            cursor: grab;
+        }
+
+        .carousel:active {
+            cursor: grabbing;
+        }
+
+        /* ===== 卡片 ===== */
+        .carousel-item {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            border-radius: 12px;
+            overflow: visible;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.1) inset;
+            user-select: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .carousel-item .img-wrap {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .carousel-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+            filter: brightness(0.8);
+            transition: filter 0.3s;
+            display: block;
+        }
+
+        .carousel-item:hover img {
+            filter: brightness(1.15);
+        }
+
+        @supports (-webkit-box-reflect: below) {
+            .carousel-item .img-wrap {
+                -webkit-box-reflect: below 15px linear-gradient(transparent, transparent, rgba(0, 0, 0, 0.3));
+            }
+        }
+
+        @supports not (-webkit-box-reflect: below) {
+            .carousel-item::after {
+                content: '';
+                position: absolute;
+                top: 100%;
+                margin-top: 15px;
+                left: 0;
+                width: 100%;
+                height: 40%;
+                border-radius: 12px;
+                transform: scaleY(-1);
+                opacity: 0.25;
+                -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent);
+                mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent);
+                pointer-events: none;
+            }
+        }
+
+        /* 浮層說明 */
+        .carousel-item .caption {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 28px 14px 14px;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+            border-radius: 0 0 12px 12px;
+            opacity: 0;
+            transform: translateY(6px);
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+        }
+
+        .carousel-item:hover .caption {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .caption-title {
+            font-size: .82rem;
+            font-weight: 600;
+            color: #fff;
+            margin: 0 0 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .caption-date {
+            font-size: .68rem;
+            color: rgba(255, 255, 255, .55);
+            margin: 0;
+        }
+
+        /* 放大提示 */
+        .carousel-item .click-hint {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .15);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .75rem;
+            opacity: 0;
+            transition: opacity .3s;
+            pointer-events: none;
+        }
+
+        .carousel-item:hover .click-hint {
+            opacity: 1;
+        }
+
+        /* ===== 功能二：標籤篩選橫幅 ===== */
+        #tag-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px 16px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tag-btn {
+            padding: 4px 14px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.7);
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+            user-select: none;
+        }
+
+        .tag-btn:hover {
+            background: rgba(255, 255, 255, 0.18);
+            color: #fff;
+        }
+
+        .tag-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        /* 標籤選擇 modal（上傳時） */
+        #tag-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(6px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        #tag-modal.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .tag-modal-box {
+            background: #1e1e2e;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            padding: 24px 28px;
+            width: min(360px, 90vw);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        }
+
+        .tag-modal-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
+        }
+
+        .tag-modal-desc {
+            font-size: .78rem;
+            color: rgba(255, 255, 255, .5);
+            text-align: center;
+        }
+
+        .tag-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .tag-opt {
+            padding: 6px 18px;
+            border-radius: 50px;
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.75);
+            transition: all 0.2s;
+        }
+
+        .tag-opt:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+        }
+
+        .tag-opt.selected {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .tag-modal-confirm {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 10px;
+            font-size: .9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .tag-modal-confirm:hover {
+            opacity: 0.85;
+        }
+
+        /* ===== 頂部橫幅提示 ===== */
+        #storage-banner {
+            position: fixed;
+            top: 55px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(16, 185, 129, 0.88);
+            color: #fff;
+            padding: 7px 20px;
+            border-radius: 50px;
+            font-size: .78rem;
+            font-weight: 600;
+            backdrop-filter: blur(8px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s;
+            z-index: 100;
+            white-space: nowrap;
+        }
+
+        #storage-banner.show {
+            opacity: 1;
+        }
+
+        #storage-banner.error {
+            background: rgba(239, 68, 68, 0.88);
+        }
+
+        /* ===== 雲端同步進度條 ===== */
+        #sync-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(4px);
+            z-index: 900;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.2rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        #sync-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #sync-overlay .sync-box {
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 2rem 2.5rem;
+            min-width: 320px;
+            max-width: 480px;
+            width: 90vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        }
+
+        #sync-overlay .sync-icon {
+            font-size: 2.4rem;
+            animation: syncPulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes syncPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.15);
+                opacity: 0.7;
+            }
+        }
+
+        #sync-overlay .sync-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            letter-spacing: 0.05em;
+        }
+
+        #sync-overlay .sync-status {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            min-height: 1.2em;
+            text-align: center;
+        }
+
+        #sync-overlay .sync-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        #sync-overlay .sync-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #34d399, #60a5fa);
+            border-radius: 999px;
+            transition: width 0.4s cubic-bezier(.2, .8, .2, 1);
+        }
+
+        #sync-overlay .sync-count {
+            font-size: 0.78rem;
+            color: #64748b;
+        }
+
+        /* ===== 全螢幕 Lightbox ===== */
+        #lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .35s ease, background .35s ease;
+        }
+
+        #lightbox.open {
+            opacity: 1;
+            pointer-events: all;
+            background: rgba(0, 0, 0, 0.9);
+        }
+
+        .lb-img-wrap {
+            position: relative;
+            max-width: 90vw;
+            max-height: 84vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+
+        #lb-img {
+            max-width: 90vw;
+            max-height: 78vh;
+            object-fit: contain;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            transform: scale(0.9);
+            transition: transform .35s cubic-bezier(.2, .8, .2, 1);
+            display: block;
+        }
+
+        #lightbox.open #lb-img {
+            transform: scale(1);
+        }
+
+        .lb-info {
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .lb-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .lb-date {
+            font-size: .75rem;
+            color: rgba(255, 255, 255, .5);
+        }
+
+        .lb-tag {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 2px 12px;
+            border-radius: 50px;
+            background: var(--accent);
+            font-size: .68rem;
+            font-weight: 600;
+        }
+
+        .lb-counter {
+            font-size: .7rem;
+            color: rgba(255, 255, 255, .3);
+            margin-top: 2px;
+        }
+
+        #lb-close {
+            position: fixed;
+            top: 20px;
+            right: 22px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .12);
+            border: 1px solid rgba(255, 255, 255, .2);
+            color: #fff;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .2s;
+            z-index: 1001;
+        }
+
+        #lb-close:hover {
+            background: rgba(255, 255, 255, .25);
+        }
+
+        .lb-arrow {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .2);
+            color: #fff;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .2s;
+            z-index: 1001;
+            user-select: none;
+        }
+
+        .lb-arrow:hover {
+            background: rgba(255, 255, 255, .25);
+        }
+
+        #lb-prev {
+            left: 16px;
+        }
+
+        #lb-next {
+            right: 16px;
+        }
+
+        /* ===== 功能三：Firebase 使用者按鈕 ===== */
+        #user-area {
+            position: fixed;
+            top: 9px;
+            right: 16px;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            object-fit: cover;
+            display: none;
+        }
+
+        #login-btn,
+        #logout-btn {
+            padding: 5px 16px;
+            border-radius: 50px;
+            font-size: .75rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1.5px solid var(--accent);
+            transition: background .2s, color .2s;
+        }
+
+        #login-btn {
+            background: transparent;
+            color: var(--accent);
+        }
+
+        #login-btn:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        #logout-btn {
+            background: rgba(239, 68, 68, .15);
+            border-color: #ef4444;
+            color: #ef4444;
+            display: none;
+        }
+
+        #logout-btn:hover {
+            background: rgba(239, 68, 68, .35);
+        }
+
+        #cloud-sync-btn {
+            padding: 5px 14px;
+            border-radius: 50px;
+            font-size: .72rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .2);
+            color: rgba(255, 255, 255, .7);
+            display: none;
+            transition: background .2s;
+        }
+
+        #cloud-sync-btn:hover {
+            background: rgba(255, 255, 255, .18);
+            color: #fff;
+        }
+
+        #cloud-restore-btn {
+            padding: 5px 14px;
+            border-radius: 50px;
+            font-size: .72rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: rgba(96, 165, 250, .15);
+            border: 1px solid rgba(96, 165, 250, .4);
+            color: rgba(147, 197, 253, .9);
+            display: none;
+            transition: background .2s;
+        }
+
+        #cloud-restore-btn:hover {
+            background: rgba(96, 165, 250, .3);
+            color: #fff;
+        }
+
+        #delete-all-btn {
+            padding: 5px 14px;
+            border-radius: 50px;
+            font-size: .72rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: rgba(239, 68, 68, .15);
+            border: 1px solid rgba(239, 68, 68, .45);
+            color: rgba(252, 165, 165, .9);
+            display: none;
+            transition: background .2s;
+        }
+
+        #delete-all-btn:hover {
+            background: rgba(239, 68, 68, .35);
+            color: #fff;
+        }
+
+        /* 確認刪除 modal */
+        #delete-confirm-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1001;
+            background: rgba(0, 0, 0, .65);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .28s;
+        }
+
+        #delete-confirm-modal.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .del-modal-box {
+            background: rgba(15, 23, 42, .95);
+            border: 1px solid rgba(239, 68, 68, .35);
+            border-radius: 20px;
+            padding: 2rem 2.2rem;
+            max-width: 380px;
+            width: 90vw;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+        }
+
+        .del-modal-icon {
+            font-size: 2.4rem;
+        }
+
+        .del-modal-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fca5a5;
+        }
+
+        .del-modal-desc {
+            font-size: .82rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        .del-modal-btns {
+            display: flex;
+            gap: .75rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .del-modal-btns button {
+            flex: 1;
+            padding: .55rem 1rem;
+            border-radius: 999px;
+            border: none;
+            font-size: .85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s;
+        }
+
+        #del-cancel-btn {
+            background: rgba(255, 255, 255, .1);
+            color: #cbd5e1;
+        }
+
+        #del-cancel-btn:hover {
+            background: rgba(255, 255, 255, .18);
+        }
+
+        #del-confirm-btn {
+            background: #dc2626;
+            color: #fff;
+        }
+
+        #del-confirm-btn:hover {
+            background: #b91c1c;
+        }
+
+        /* ===== 控制面板 ===== */
+        .control-panel {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background: var(--panel-bg);
+            padding: 14px 22px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            transition: background 0.6s;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        #file-upload {
+            display: none;
+        }
+
+        /* ===== 功能AE：批次上傳進度條 ===== */
+        #upload-progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            background: rgba(10, 10, 30, .92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            padding: 10px 20px 12px;
+        }
+
+        #upload-progress-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, .12);
+            border-radius: 99px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        #upload-progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #6366f1, #a78bfa, #38bdf8);
+            background-size: 200% 100%;
+            transition: width .3s ease;
+            animation: uploadShimmer 1.5s linear infinite;
+        }
+
+        @keyframes uploadShimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        #upload-progress-label {
+            font-size: .78rem;
+            color: rgba(255, 255, 255, .7);
+            letter-spacing: .02em;
+        }
+
+        #upload-progress-count {
+            font-size: .72rem;
+            color: rgba(148, 163, 184, .8);
+            margin-left: auto;
+        }
+
+        #upload-progress-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+
+        /* ===== 功能一：主題色票 ===== */
+        .theme-row {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .theme-row label {
+            font-size: .65rem;
+            color: rgba(255, 255, 255, .4);
+            margin-right: 2px;
+        }
+
+        .theme-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform .2s, border-color .2s;
+        }
+
+        .theme-dot:hover {
+            transform: scale(1.25);
+        }
+
+        .theme-dot.active {
+            border-color: #fff;
+            transform: scale(1.2);
+        }
+
+        /* ===== RWD ===== */
+        @media (max-width:768px) {
+            .carousel {
+                width: 200px;
+                height: 300px;
+            }
+
+            .control-panel {
+                bottom: 12px;
+                width: 94%;
+                padding: 10px 12px;
+            }
+
+            .lb-arrow {
+                width: 36px;
+                height: 36px;
+                font-size: 1rem;
+            }
+
+            #lb-prev {
+                left: 4px;
+            }
+
+            #lb-next {
+                right: 4px;
+            }
+        }
+
+        /* ===== 功能B：粒子畫布 ===== */
+        #particle-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .scene {
+            z-index: 1;
+        }
+
+        /* ===== 功能D：卡片翻轉雙面 ===== */
+        .carousel-item-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.65s cubic-bezier(.2, .8, .2, 1);
+            border-radius: 12px;
+        }
+
+        .carousel-item.flipped .carousel-item-inner {
+            transform: rotateY(180deg) !important;
+            animation: none !important;
+            /* 翻面時停止一切動畫干擾 */
+        }
+
+        .card-front,
+        .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            border-radius: 12px;
+        }
+
+        .card-front {
+            overflow: hidden;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+            background: linear-gradient(135deg, rgba(18, 18, 42, 0.97), rgba(6, 6, 18, 0.99));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px 14px;
+            text-align: center;
+        }
+
+        .back-icon {
+            font-size: 2rem;
+            margin-bottom: 4px;
+        }
+
+        .back-title {
+            font-size: .9rem;
+            font-weight: 700;
+            color: #fff;
+            margin: 0;
+            line-height: 1.35;
+        }
+
+        .back-date {
+            font-size: .7rem;
+            color: rgba(255, 255, 255, .45);
+            margin: 0;
+        }
+
+        .back-tag-badge {
+            padding: 3px 14px;
+            border-radius: 50px;
+            background: var(--accent);
+            font-size: .7rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        /* 翻面按鈕 */
+        .flip-btn {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .15);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, .25);
+            color: #fff;
+            font-size: .7rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity .3s, background .2s;
+            z-index: 20;
+        }
+
+        .carousel-item:hover .flip-btn {
+            opacity: 1;
+        }
+
+        .flip-btn:hover {
+            background: rgba(255, 255, 255, .3);
+        }
+
+        .back-flip-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .2);
+            color: #fff;
+            font-size: .7rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: .6;
+            transition: opacity .2s, background .2s;
+        }
+
+        .back-flip-btn:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, .25);
+        }
+
+        /* ===== 功能C：縮圖帶 ===== */
+        #thumb-strip {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 76px;
+            z-index: 8;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;
+            gap: 6px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, .55);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, .07);
+            transform: translateY(100%);
+            transition: transform .35s cubic-bezier(.2, .8, .2, 1);
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, .15) transparent;
+        }
+
+        #thumb-strip.visible {
+            transform: translateY(0);
+        }
+
+        .thumb-item {
+            flex-shrink: 0;
+            width: 46px;
+            height: 58px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color .2s, transform .2s;
+            position: relative;
+        }
+
+        .thumb-item:hover {
+            transform: scale(1.12);
+            border-color: var(--accent);
+        }
+
+        .thumb-item.active {
+            border-color: #fff;
+            box-shadow: 0 0 8px rgba(255, 255, 255, .4);
+        }
+
+        .thumb-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .thumb-num {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            font-size: .48rem;
+            color: rgba(255, 255, 255, .8);
+            text-align: center;
+            background: rgba(0, 0, 0, .45);
+            padding: 1px 0;
+        }
+
+        /* ===== 功能E：編輯模式 ===== */
+        .carousel-item.edit-mode-active {
+            outline: 2px dashed rgba(251, 191, 36, .7);
+            outline-offset: 3px;
+            cursor: grab;
+        }
+
+        .carousel-item.drag-over {
+            outline-color: #22c55e;
+        }
+
+        .card-delete-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: rgba(220, 38, 38, .85);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            transition: transform .15s, background .15s;
+            backdrop-filter: blur(4px);
+        }
+
+        .card-delete-btn:hover {
+            transform: scale(1.2);
+            background: #dc2626;
+        }
+
+        /* ===== 功能H：批次操作列 ===== */
+        #bulk-bar {
+            position: fixed;
+            top: -60px;
+            left: 0;
+            right: 0;
+            height: 52px;
+            background: rgba(15, 23, 42, .92);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 9000;
+            transition: top .3s cubic-bezier(.2, .8, .2, 1);
+        }
+
+        #bulk-bar.show {
+            top: 0;
+        }
+
+        #bulk-bar .bulk-count {
+            color: #94a3b8;
+            font-size: .85rem;
+        }
+
+        #bulk-bar button {
+            padding: 6px 16px;
+            border-radius: 999px;
+            border: none;
+            font-size: .82rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform .15s;
+        }
+
+        #bulk-bar button:hover {
+            transform: scale(1.05);
+        }
+
+        #bulk-select-all {
+            background: #334155;
+            color: #e2e8f0;
+        }
+
+        #bulk-delete-btn {
+            background: #dc2626;
+            color: #fff;
+        }
+
+        #bulk-cancel-btn {
+            background: #475569;
+            color: #e2e8f0;
+        }
+
+        .carousel-item.bulk-selected::after {
+            content: '✓';
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 25;
+        }
+
+        /* ===== 功能F：Lightbox 標題可編輯 ===== */
+        #lb-title[contenteditable="true"] {
+            outline: 2px solid var(--accent);
+            border-radius: 4px;
+            padding: 0 4px;
+            background: rgba(255, 255, 255, .06);
+            cursor: text;
+            min-width: 60px;
+        }
+
+        #lb-title::after {
+            content: ' ✏️';
+            font-size: .7em;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        #lb-title:hover::after {
+            opacity: .6;
+        }
+
+        /* ===== 功能W：進場波浪動畫（套用在 inner 過渡蛋形容器，防止覆蓋 3D rotateY+translateZ）===== */
+        @keyframes cardEnterW {
+            from {
+                opacity: 0;
+                transform: scale(0.82) translateY(24px);
+                filter: blur(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+                filter: blur(0);
+            }
+        }
+
+        .entering-wave {
+            animation: cardEnterW .45s cubic-bezier(.22, 1, .36, 1) both;
+        }
+
+        /* ===== 功能AA：公開相簿開關按鈕 ===== */
+        #public-toggle-btn {
+            display: none;
+            /* 登入後才顯示 */
+            transition: background 0.25s, transform 0.15s;
+        }
+
+        #public-toggle-btn.is-public {
+            background: rgba(34, 197, 94, 0.25) !important;
+            border: 1px solid rgba(34, 197, 94, 0.5) !important;
+            color: #86efac !important;
+        }
+
+        #public-toggle-btn.is-public:hover {
+            background: rgba(34, 197, 94, 0.38) !important;
+        }
+
+        /* ===== 功能AB：相機型號强章 ===== */
+        .camera-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 8px;
+            padding: 3px 10px;
+            background: rgba(99, 102, 241, 0.18);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 50px;
+            font-size: .68rem;
+            color: #a5b4fc;
+            letter-spacing: .02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
+        }
+
+        @keyframes themeFade {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        body.theme-switching::before {
+            animation: themeFade .55s ease both;
+        }
+
+        /* ===== 功能U：版型設定抽屜 ===== */
+        #layout-drawer {
+            position: fixed;
+            right: -240px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 220px;
+            background: rgba(15, 23, 42, .96);
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 16px 0 0 16px;
+            padding: 18px 16px 18px 20px;
+            z-index: 8000;
+            transition: right .35s cubic-bezier(.2, .8, .2, 1);
+            backdrop-filter: blur(14px);
+            box-shadow: -8px 0 32px rgba(0, 0, 0, .45);
+        }
+
+        #layout-drawer.open {
+            right: 0;
+        }
+
+        #layout-toggle-btn {
+            position: absolute;
+            left: -38px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            background: rgba(15, 23, 42, .9);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 8px 0 0 8px;
+            color: #e2e8f0;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .2s;
+        }
+
+        #layout-toggle-btn:hover {
+            background: rgba(99, 102, 241, .4);
+        }
+
+        .layout-title {
+            font-size: .75rem;
+            font-weight: 700;
+            color: #94a3b8;
+            letter-spacing: .08em;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+        }
+
+        .layout-row {
+            margin-bottom: 14px;
+        }
+
+        .layout-row label {
+            display: flex;
+            justify-content: space-between;
+            font-size: .72rem;
+            color: #cbd5e1;
+            margin-bottom: 5px;
+        }
+
+        .layout-row label span {
+            color: var(--accent);
+            font-weight: 600;
+            min-width: 36px;
+            text-align: right;
+        }
+
+        .layout-row input[type=range] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .layout-reset-btn {
+            width: 100%;
+            padding: 6px 0;
+            margin-top: 4px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: .72rem;
+            cursor: pointer;
+            transition: background .18s;
+        }
+
+        .layout-reset-btn:hover {
+            background: rgba(255, 255, 255, .12);
+        }
+
+        /* ===== 功能Y：唯讀模式 ===== */
+        body.readonly-mode .control-panel,
+        body.readonly-mode #tag-manage-modal,
+        body.readonly-mode #bulk-bar,
+        body.readonly-mode #layout-drawer {
+            display: none !important;
+        }
+
+        body.readonly-mode #tag-bar {
+            top: 0;
+        }
+
+        #share-bar {
+            display: none;
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, .9);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 12px;
+            padding: 8px 18px;
+            font-size: .78rem;
+            color: #94a3b8;
+            z-index: 7000;
+            backdrop-filter: blur(12px);
+            gap: 10px;
+            align-items: center;
+        }
+
+        #share-bar.visible {
+            display: flex;
+        }
+
+        #share-bar strong {
+            color: #e2e8f0;
+        }
+
+        #share-bar a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        #share-link-btn {
+            padding: 5px 14px;
+            background: var(--accent);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            font-size: .75rem;
+            cursor: pointer;
+            transition: opacity .18s;
+        }
+
+        #share-link-btn:hover {
+            opacity: .85;
+        }
+
+        /* ===== 功能I：自訂標籤管理 Modal ===== */
+        #tag-manage-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .65);
+            backdrop-filter: blur(8px);
+            z-index: 8500;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #tag-manage-modal.open {
+            display: flex;
+        }
+
+        .tag-manage-box {
+            background: rgba(15, 23, 42, .97);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 16px;
+            padding: 24px;
+            width: min(420px, 92vw);
+            box-shadow: 0 24px 64px rgba(0, 0, 0, .6);
+        }
+
+        .tag-manage-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .tag-manage-input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tag-manage-input-row input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .07);
+            border: 1px solid rgba(255, 255, 255, .15);
+            color: #f1f5f9;
+            font-size: .9rem;
+            outline: none;
+        }
+
+        .tag-manage-input-row input::placeholder {
+            color: rgba(255, 255, 255, .3);
+        }
+
+        .tag-manage-input-row input:focus {
+            border-color: var(--accent);
+        }
+
+        .tag-add-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-size: .9rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 999px;
+            padding: 4px 10px 4px 12px;
+            font-size: .82rem;
+            color: #e2e8f0;
+        }
+
+        .tag-chip.default {
+            opacity: .55;
+        }
+
+        .tag-chip-del {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(220, 38, 38, .7);
+            border: none;
+            color: #fff;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s;
+        }
+
+        .tag-chip-del:hover {
+            background: #dc2626;
+        }
+
+        .tag-manage-close {
+            display: block;
+            width: 100%;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255, 255, 255, .07);
+            color: #94a3b8;
+            font-size: .9rem;
+            cursor: pointer;
+            transition: background .15s;
+        }
+
+        .tag-manage-close:hover {
+            background: rgba(255, 255, 255, .12);
+        }
+    </style>
+
+</head>
+
+<body data-theme="cosmos">
+
+    <!-- ===== 粒子背景畫布 ===== -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- ===== 標籤篩選橫幅 ===== -->
+    <div id="tag-bar">
+        <!-- 由 JS 動態生成 -->
+    </div>
+
+    <!-- ===== Firebase 使用者區域 ===== -->
+    <div id="user-area">
+        <img id="user-avatar" src="" alt="頭像">
+        <button id="delete-all-btn">🗑️ 全部刪除</button>
+        <button id="cloud-restore-btn">📲 從雲端還原</button>
+        <button id="cloud-sync-btn">☁️ 同步雲端</button>
+        <button id="login-btn">🔐 登入</button>
+        <button id="logout-btn">登出</button>
+    </div>
+
+    <!-- 刪除確認 modal -->
+    <div id="delete-confirm-modal">
+        <div class="del-modal-box">
+            <div class="del-modal-icon">⚠️</div>
+            <div class="del-modal-title">確定要刪除全部照片？</div>
+            <div class="del-modal-desc">這將同時清除<strong>本機</strong>與<strong>雲端</strong>的所有圖片，且無法恢復。</div>
+            <div class="del-modal-btns">
+                <button id="del-cancel-btn">取消</button>
+                <button id="del-confirm-btn">✔️ 確定刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 3D 場景 ===== -->
+    <div class="scene" id="scene">
+        <div class="carousel" id="carousel"></div>
+    </div>
+
+    <!-- ===== 頂部橫幅提示 ===== -->
+    <div id="storage-banner">💾 圖片已儲存！</div>
+
+    <!-- 雲端同步進度框 -->
+    <div id="sync-overlay">
+        <div class="sync-box">
+            <div class="sync-icon">☁️</div>
+            <div class="sync-title">同步對雲端...</div>
+            <div class="sync-track">
+                <div class="sync-fill" id="sync-fill"></div>
+            </div>
+            <div class="sync-count" id="sync-count">0 / 0</div>
+            <div class="sync-status" id="sync-status">準備中...</div>
+        </div>
+    </div>
+
+    <!-- ===== 批次操作列 (功能H) ===== -->
+    <div id="bulk-bar">
+        <span class="bulk-count" id="bulk-count-label">已選 0 張</span>
+        <button id="bulk-select-all">全選</button>
+        <button id="bulk-delete-btn">🗑 刪除</button>
+        <button id="bulk-cancel-btn">✕ 取消</button>
+    </div>
+
+    <!-- ===== 標籤選擇 Modal ===== -->
+    <div id="tag-modal">
+        <div class="tag-modal-box">
+            <div class="tag-modal-title">📁 選擇圖片分類</div>
+            <div class="tag-modal-desc">為這批圖片選一個標籤</div>
+            <div class="tag-options" id="tag-options"></div>
+            <button class="tag-modal-confirm" id="tag-confirm-btn">✅ 確認加入畫廊</button>
+        </div>
+    </div>
+
+    <!-- ===== 全螢幕 Lightbox ===== -->
+    <div id="lightbox">
+        <button id="lb-close" title="關閉（Esc）">✕</button>
+        <button id="lb-prev" class="lb-arrow" title="上一張（←）">‹</button>
+        <button id="lb-next" class="lb-arrow" title="下一張（→）">›</button>
+        <div class="lb-img-wrap">
+            <img id="lb-img" src="" alt="">
+            <div class="lb-info">
+                <div class="lb-title" id="lb-title"></div>
+                <div class="lb-date" id="lb-date"></div>
+                <div id="lb-tag"></div>
+                <div class="lb-counter" id="lb-counter"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 控制面板 ===== -->
+    <div class="control-panel">
+        <h2 class="panel-title">我的 3D 畫廊</h2>
+        <p class="panel-hint">拖曳旋轉 ｜ ↑↓ 傾斜 ｜ 滾輪縮放 ｜ 點擊放大</p>
+
+        <div class="btn-row">
+            <!-- 上傳 -->
+            <label for="file-upload" class="btn-upload">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                選擇圖片
+            </label>
+            <input type="file" id="file-upload" multiple accept="image/*">
+
+            <!-- 自動旋轉 -->
+            <button id="auto-rotate-btn" class="btn-gallery btn-emerald">
+                <span id="rotate-icon">⏸</span><span id="rotate-label">自動旋轉</span>
+            </button>
+
+            <!-- 清除 -->
+            <button id="clear-storage-btn" class="btn-gallery btn-red btn-hidden">
+                🗑 清除
+            </button>
+
+            <!-- 縮圖帶開關 -->
+            <button id="thumb-toggle-btn" class="btn-gallery btn-slate">
+                🎞️ 縮圖
+            </button>
+
+            <!-- 編輯模式 (功能E) -->
+            <button id="edit-mode-btn" class="btn-gallery btn-slate">
+                ✏️ 編輯
+            </button>
+
+            <!-- 自訂標籤管理 (功能I) -->
+            <button id="tag-manage-btn" class="btn-gallery btn-slate">
+                ⚙️ 標籤
+            </button>
+
+            <!-- 版型設定 (功能U) -->
+            <button id="layout-panel-btn" class="btn-gallery btn-slate">
+                📐 版型
+            </button>
+
+            <!-- 公開相簿開關 (功能AA) - 登入後才顯示 -->
+            <button id="public-toggle-btn" class="btn-gallery btn-slate">
+                🌐 公開
+            </button>
+
+            <!-- 公開分享 (功能Y) -->
+            <button id="share-link-btn" class="btn-gallery btn-slate">
+                🔗 分享
+            </button>
+        </div>
+
+        <!-- 功能一：主題色票 -->
+        <div class="theme-row">
+            <label>主題：</label>
+            <div class="theme-dot active" data-theme="cosmos" style="background:linear-gradient(135deg,#1a1a2e,#6366f1)"
+                title="宇宙深藍"></div>
+            <div class="theme-dot" data-theme="sunset" style="background:linear-gradient(135deg,#3d1500,#f97316)"
+                title="日落橘紅"></div>
+            <div class="theme-dot" data-theme="forest" style="background:linear-gradient(135deg,#0a2a18,#22c55e)"
+                title="薄荷翠綠"></div>
+            <div class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#2a0a2a,#ec4899)"
+                title="玫瑰暮紫"></div>
+            <div class="theme-dot" data-theme="gold" style="background:linear-gradient(135deg,#1e1700,#eab308)"
+                title="午夜黑金"></div>
+        </div>
+
+        <p class="panel-hint">鍵盤 ← → ↑ ↓ ｜ 圖片自動儲存於瀏覽器</p>
+    </div>
+
+    <!-- ===== 縮圖帶 ===== -->
+    <div id="thumb-strip"></div>
+
+    <!-- ===== 功能U：版型設定抽屜 ===== -->
+    <div id="layout-drawer">
+        <button id="layout-toggle-btn" title="版型設定">⚙</button>
+        <div class="layout-title">版型設定</div>
+
+        <div class="layout-row">
+            <label>卡片寬度 <span id="lv-width-val">260px</span></label>
+            <input id="lv-width" type="range" min="140" max="400" value="260" step="10">
+        </div>
+        <div class="layout-row">
+            <label>卡片高度 <span id="lv-height-val">380px</span></label>
+            <input id="lv-height" type="range" min="200" max="560" value="380" step="10">
+        </div>
+        <div class="layout-row">
+            <label>透視深度 <span id="lv-persp-val">1200px</span></label>
+            <input id="lv-persp" type="range" min="600" max="3000" value="1200" step="50">
+        </div>
+        <div class="layout-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08);">
+            <label>🔄 旋轉速度 <span id="lv-speed-val">0.25度/幀</span></label>
+            <input id="lv-speed" type="range" min="0.05" max="1.0" value="0.25" step="0.05">
+        </div>
+        <button class="layout-reset-btn" id="lv-reset">↺ 還原預設</button>
+    </div>
+
+    <!-- ===== 功能Y：唯讀分享列 ===== -->
+    <div id="share-bar">
+        <span>👁 唯讀相簿</span>
+        <strong id="share-owner-name">載入中…</strong>
+        <button id="share-copy-btn"
+            style="padding:4px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;color:#e2e8f0;font-size:.72rem;cursor:pointer;">📋
+            複製連結</button>
+    </div>
+
+    <!-- ===== 自訂標籤管理 Modal (功能I) ===== -->
+    <div id="tag-manage-modal">
+        <div class="tag-manage-box">
+            <div class="tag-manage-title">⚙️ 標籤管理</div>
+            <div class="tag-manage-input-row">
+                <input id="tag-new-input" type="text" placeholder="輸入新標籤（含 Emoji，如 🏠 居家）" maxlength="20">
+                <button class="tag-add-btn" id="tag-add-btn">＋ 新增</button>
+            </div>
+            <div class="tag-list" id="tag-manage-list"></div>
+            <button class="tag-manage-close" id="tag-manage-close">完成</button>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+        // ================================================================
+        //  常數
+        // ================================================================
+        const LS_KEY_IMAGES = 'gallery_3d_v4_images';
+        const LS_KEY_THEME = 'gallery_3d_v4_theme';
+        const LS_KEY_CUSTOM_TAGS = 'gallery_3d_v4_custom_tags';
+        const LS_KEY_LAYOUT = 'gallery_3d_v4_layout'; // 功能U
+        const DEFAULT_TAGS = ['全部', '🌄 風景', '👤 人物', '🍜 美食', '✈️ 旅行', '🎨 其他'];
+        // 動態 TAGS：合併預設 + 自訂
+        let customTags = JSON.parse(localStorage.getItem(LS_KEY_CUSTOM_TAGS) || '[]');
+        let TAGS = [...DEFAULT_TAGS, ...customTags.filter(t => !DEFAULT_TAGS.includes(t))];
+        function syncTags() {
+            TAGS = [...DEFAULT_TAGS, ...customTags.filter(t => !DEFAULT_TAGS.includes(t))];
+            localStorage.setItem(LS_KEY_CUSTOM_TAGS, JSON.stringify(customTags));
+        }
+
+        const DEFAULT_IMAGE_DATA = [
+            { src: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80', title: '迷霧森林', date: '2024-06-01', tag: '🌄 風景' },
+            { src: 'https://images.unsplash.com/photo-1511884642898-4c92249e20b6?auto=format&fit=crop&w=800&q=80', title: '晨光山嶺', date: '2024-07-15', tag: '🌄 風景' },
+            { src: 'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?auto=format&fit=crop&w=800&q=80', title: '野花盛放', date: '2024-05-22', tag: '🌄 風景' },
+            { src: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?auto=format&fit=crop&w=800&q=80', title: '雪峰倒影', date: '2024-01-10', tag: '✈️ 旅行' },
+            { src: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=800&q=80', title: '高原暮色', date: '2024-08-03', tag: '🌄 風景' },
+            { src: 'https://images.unsplash.com/photo-1420593248178-d88870618ca0?auto=format&fit=crop&w=800&q=80', title: '飛鳥掠天', date: '2024-09-17', tag: '🌄 風景' },
+            { src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', title: '海天一色', date: '2024-11-05', tag: '✈️ 旅行' },
+            { src: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80', title: '峻嶺雲海', date: '2024-12-25', tag: '🌄 風景' },
+        ];
+
+
+        // ================================================================
+        //  DOM
+        // ================================================================
+        const scene = document.getElementById('scene');
+        const carousel = document.getElementById('carousel');
+        const fileInput = document.getElementById('file-upload');
+        const autoRotateBtn = document.getElementById('auto-rotate-btn');
+        const rotateIcon = document.getElementById('rotate-icon');
+        const rotateLabel = document.getElementById('rotate-label');
+        const clearStorageBtn = document.getElementById('clear-storage-btn');
+        const storageBanner = document.getElementById('storage-banner');
+        const tagBar = document.getElementById('tag-bar');
+        const tagModal = document.getElementById('tag-modal');
+        const tagOptions = document.getElementById('tag-options');
+        const tagConfirmBtn = document.getElementById('tag-confirm-btn');
+        const lightbox = document.getElementById('lightbox');
+        const lbImg = document.getElementById('lb-img');
+        const lbTitle = document.getElementById('lb-title');
+        const lbDate = document.getElementById('lb-date');
+        const lbTagEl = document.getElementById('lb-tag');
+        const lbCounter = document.getElementById('lb-counter');
+        const lbClose = document.getElementById('lb-close');
+        const lbPrev = document.getElementById('lb-prev');
+        const lbNext = document.getElementById('lb-next');
+        // Firebase UI
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userAvatar = document.getElementById('user-avatar');
+        const cloudSyncBtn = document.getElementById('cloud-sync-btn');
+        const cloudRestoreBtn = document.getElementById('cloud-restore-btn');
+        const thumbToggleBtn = document.getElementById('thumb-toggle-btn');
+        const thumbStrip = document.getElementById('thumb-strip');
+        // 功能E/H/I 新元素
+        const editModeBtn = document.getElementById('edit-mode-btn');
+        const bulkBar = document.getElementById('bulk-bar');
+        const bulkCountLabel = document.getElementById('bulk-count-label');
+        const bulkSelectAll = document.getElementById('bulk-select-all');
+        const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        const bulkCancelBtn = document.getElementById('bulk-cancel-btn');
+        const tagManageBtn = document.getElementById('tag-manage-btn');
+        const tagManageModal = document.getElementById('tag-manage-modal');
+        const tagManageList = document.getElementById('tag-manage-list');
+        const tagNewInput = document.getElementById('tag-new-input');
+        const tagAddBtn = document.getElementById('tag-add-btn');
+        const tagManageClose = document.getElementById('tag-manage-close');
+        // 功能U: 版型抽屜
+        const layoutDrawer = document.getElementById('layout-drawer');
+        const layoutToggleBtn = document.getElementById('layout-toggle-btn');
+        const layoutPanelBtn = document.getElementById('layout-panel-btn');
+        const lvWidth = document.getElementById('lv-width');
+        const lvHeight = document.getElementById('lv-height');
+        const lvPersp = document.getElementById('lv-persp');
+        const lvWidthVal = document.getElementById('lv-width-val');
+        const lvHeightVal = document.getElementById('lv-height-val');
+        const lvPerspVal = document.getElementById('lv-persp-val');
+        const lvReset = document.getElementById('lv-reset');
+        // 功能Y: 公開分享 / 唯讀
+        const shareBar = document.getElementById('share-bar');
+        const shareOwnerName = document.getElementById('share-owner-name');
+        const shareCopyBtn = document.getElementById('share-copy-btn');
+        const shareLinkBtn = document.getElementById('share-link-btn');
+
+
+        // ================================================================
+        //  狀態
+        // ================================================================
+        let allImageData = [];
+        let filteredData = [];
+        let activeTag = '全部';
+        let currentRotationY = 0, currentRotationX = 0;
+        let isDragging = false;
+        let startX = 0, startY = 0, prevX = 0, prevY = 0;
+        let velocityX = 0, velocityY = 0;
+        let animationFrameId;
+        let perspective = 1200;
+        let isAutoRotating = true;
+        let autoRotateRafId = null;      // 自動旋轉專用 RAF ID
+        let autoRotateSpeed = 0.25;      // 自動旋轉速度（度/幀），可調整
+        let numImages = 0, theta = 0;
+        let lbCurrentIndex = 0, lbOpen = false;
+
+        // 上傳暫存（等待 Modal 確認）
+        let pendingUploadFiles = [];
+        let selectedUploadTag = '🎨 其他';
+
+        // Firebase 使用者
+        let currentUser = null;
+        // 功能E: 編輯模式
+        let editMode = false;
+        let dragSrcIndex = null;
+        // 功能H: 批次選取
+        let selectMode = false;
+        const selectedIndices = new Set();
+        let longPressTimer = null;
+
+        // 功能U: 版型設定狀態（從 localStorage 還原）
+        const DEFAULT_LAYOUT = { w: 260, h: 380, persp: 1200 };
+        let layoutCfg = { ...DEFAULT_LAYOUT, ...JSON.parse(localStorage.getItem(LS_KEY_LAYOUT) || '{}') };
+
+        // ================================================================
+        //  功能U：版型設定抽屜
+        // ================================================================
+        function applyLayoutCfg(rebuildGallery = false) {
+            // 更新 CSS 變數動態設定卡片尺寸
+            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
+            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
+            perspective = layoutCfg.persp;
+            scene.style.perspective = perspective + 'px';
+            lvWidth.value = layoutCfg.w; lvWidthVal.textContent = layoutCfg.w + 'px';
+            lvHeight.value = layoutCfg.h; lvHeightVal.textContent = layoutCfg.h + 'px';
+            lvPersp.value = layoutCfg.persp; lvPerspVal.textContent = layoutCfg.persp + 'px';
+            if (rebuildGallery) { buildGallery(); if (isAutoRotating) startAutoRotate(); }
+            localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+        }
+
+        [layoutToggleBtn, layoutPanelBtn].forEach(btn => btn && btn.addEventListener('click', () => {
+            layoutDrawer.classList.toggle('open');
+        }));
+
+        lvWidth.addEventListener('input', () => {
+            layoutCfg.w = +lvWidth.value;
+            lvWidthVal.textContent = layoutCfg.w + 'px';
+            document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
+            buildGallery(); if (isAutoRotating) startAutoRotate();
+            localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+        });
+        lvHeight.addEventListener('input', () => {
+            layoutCfg.h = +lvHeight.value;
+            lvHeightVal.textContent = layoutCfg.h + 'px';
+            document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
+            buildGallery(); if (isAutoRotating) startAutoRotate();
+            localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+        });
+        lvPersp.addEventListener('input', () => {
+            layoutCfg.persp = +lvPersp.value;
+            lvPerspVal.textContent = layoutCfg.persp + 'px';
+            perspective = layoutCfg.persp;
+            scene.style.perspective = perspective + 'px';
+            localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+        });
+        lvReset.addEventListener('click', () => {
+            layoutCfg = { ...DEFAULT_LAYOUT };
+            localStorage.removeItem(LS_KEY_LAYOUT);
+            applyLayoutCfg(true); // true = 需要重建畫廊
+            showBanner('↺ 版型已還原預設', false);
+        });
+
+        // 點擊抽屜外部關閉
+        document.addEventListener('pointerdown', (e) => {
+            if (layoutDrawer.classList.contains('open') &&
+                !layoutDrawer.contains(e.target) &&
+                e.target !== layoutPanelBtn) {
+                layoutDrawer.classList.remove('open');
+            }
+        });
+
+        // 初始化版型
+        applyLayoutCfg();
+
+        // ================================================================
+        //  功能Y：公開分享連結 / 唯讀模式
+        // ================================================================
+        (function initReadonlyMode() {
+            const params = new URLSearchParams(location.search);
+            const viewUid = params.get('view');
+            const viewTag = params.get('tag');
+
+            if (!viewUid) return; // 正常模式，跳過
+
+            document.body.classList.add('readonly-mode');
+            shareBar.classList.add('visible');
+            shareOwnerName.textContent = '相簿載入中…';
+
+            // 過濾標籤
+            if (viewTag) activeTag = decodeURIComponent(viewTag);
+
+            // 功能AA：使用新版 _fb API 讀取公開相簿
+            const tryLoadSharedAlbum = () => {
+                const fb = window._fb;
+                if (!fb) { setTimeout(tryLoadSharedAlbum, 300); return; }
+
+                // 讀取 profile（確認 isPublic & 取得顯示名稱）
+                fb.getDoc(fb.doc(fb.db, `users/${viewUid}/profile/info`))
+                    .then(doc => {
+                        const data = doc.exists() ? doc.data() : {};
+                        shareOwnerName.textContent = (data.displayName || '使用者') + ' 的相簿';
+
+                        // 若未公開，顯示提示並結束
+                        if (!data.isPublic) {
+                            carousel.innerHTML = '<p style="color:rgba(255,255,255,.45);font-size:.9rem;text-align:center;margin-top:160px;">🔒 此相簿尚未公開</p>';
+                            return;
+                        }
+
+                        // 已公開：載入圖片
+                        return fb.getDocs(fb.query(
+                            fb.collection(fb.db, `users/${viewUid}/images`),
+                            fb.orderBy('order')
+                        ));
+                    })
+                    .then(snap => {
+                        if (!snap) return; // isPublic = false 已提前 return
+                        allImageData = snap.docs.map(d => ({
+                            src: d.data().url,
+                            title: d.data().title,
+                            date: d.data().date,
+                            tag: d.data().tag,
+                            camera: d.data().camera || '',
+                        }));
+                        filteredData = activeTag === '全部' ? [...allImageData]
+                            : allImageData.filter(d => d.tag === activeTag);
+                        buildTagBar(); buildGallery();
+                    })
+                    .catch(err => {
+                        console.warn('載入公開相簿失敗', err);
+                        shareOwnerName.textContent = '公開相簿';
+                        showBanner('⚠️ 無法載入公開相簿', true);
+                    });
+            };
+            setTimeout(tryLoadSharedAlbum, 400);
+        })();
+
+        // 分享按鈕：產生公開連結並複製到剪貼簿
+        shareLinkBtn.addEventListener('click', () => {
+            if (!currentUser) {
+                showBanner('⚠️ 請先登入才能分享', true); return;
+            }
+            const tag = activeTag !== '全部' ? `&tag=${encodeURIComponent(activeTag)}` : '';
+            const url = `${location.origin}${location.pathname}?view=${currentUser.uid}${tag}`;
+            navigator.clipboard.writeText(url).then(() => {
+                showBanner('🔗 分享連結已複製！', false);
+            }).catch(() => {
+                prompt('請手動複製下方連結：', url);
+            });
+        });
+
+        // 唯讀頁面複製按鈕
+        shareCopyBtn && shareCopyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(location.href).then(() => {
+                showBanner('📋 連結已複製！', false);
+            });
+        });
+
+        // ================================================================
+        //  功能一：多主題背景切換
+        // ================================================================
+        function applyTheme(themeName) {
+            // 功能W：主題切換加入過渡法
+            document.body.classList.add('theme-switching');
+            document.body.setAttribute('data-theme', themeName);
+            document.querySelectorAll('.theme-dot').forEach(d => {
+                d.classList.toggle('active', d.dataset.theme === themeName);
+            });
+            localStorage.setItem(LS_KEY_THEME, themeName);
+            setTimeout(() => document.body.classList.remove('theme-switching'), 650);
+        }
+
+        document.querySelectorAll('.theme-dot').forEach(dot => {
+            dot.addEventListener('click', () => applyTheme(dot.dataset.theme));
+        });
+
+        // 還原主題
+        const savedTheme = localStorage.getItem(LS_KEY_THEME) || 'cosmos';
+        applyTheme(savedTheme);
+
+        // ================================================================
+        //  功能二：標籤篩選橫幅
+        // ================================================================
+        function buildTagBar() {
+            tagBar.innerHTML = '';
+            // 取得目前 allImageData 中實際存在的標籤
+            const existing = new Set(allImageData.map(d => d.tag));
+            TAGS.filter(t => t === '全部' || existing.has(t)).forEach(tag => {
+                const btn = document.createElement('button');
+                btn.className = 'tag-btn' + (tag === activeTag ? ' active' : '');
+                btn.textContent = tag;
+                btn.addEventListener('click', () => {
+                    activeTag = tag;
+                    buildTagBar();
+                    applyTagFilter();
+                });
+                tagBar.appendChild(btn);
+            });
+        }
+
+        function applyTagFilter() {
+            filteredData = activeTag === '全部'
+                ? [...allImageData]
+                : allImageData.filter(d => d.tag === activeTag);
+            rebuildCarouselAnimated();
+        }
+
+        function rebuildCarouselAnimated() {
+            // 功能W：波浪動畫已在 buildGallery 內實作，直接呼叫即可
+            buildGallery();
+            // 重建後若自動旋轉開啟，需重啟（buildGallery 不影響 RAF 循環，但確保慣性繼續）
+            if (isAutoRotating) startAutoRotate();
+        }
+
+        // 標籤 Modal
+        function buildTagModal() {
+            tagOptions.innerHTML = '';
+            TAGS.filter(t => t !== '全部').forEach(tag => {
+                const opt = document.createElement('div');
+                opt.className = 'tag-opt' + (tag === selectedUploadTag ? ' selected' : '');
+                opt.textContent = tag;
+                opt.addEventListener('click', () => {
+                    selectedUploadTag = tag;
+                    tagOptions.querySelectorAll('.tag-opt').forEach(o => o.classList.remove('selected'));
+                    opt.classList.add('selected');
+                });
+                tagOptions.appendChild(opt);
+            });
+        }
+
+        function openTagModal(files) {
+            pendingUploadFiles = files;
+            selectedUploadTag = '🎨 其他';
+            buildTagModal();
+            tagModal.classList.add('open');
+        }
+        function closeTagModal() { tagModal.classList.remove('open'); }
+
+        tagConfirmBtn.addEventListener('click', () => {
+            closeTagModal();
+            processUpload(pendingUploadFiles, selectedUploadTag);
+        });
+        tagModal.addEventListener('click', e => { if (e.target === tagModal) closeTagModal(); });
+
+        // ================================================================
+        //  localStorage 工具
+        // ================================================================
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem(LS_KEY_IMAGES, JSON.stringify(allImageData));
+                showBanner('💾 已儲存！', false);
+                clearStorageBtn.classList.remove('hidden');
+            } catch {
+                showBanner('⚠️ 瀏覽器空間不足，請減少圖片數量', true);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(LS_KEY_IMAGES);
+                if (!raw) return false;
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    allImageData = parsed;
+                    clearStorageBtn.classList.remove('hidden');
+                    return true;
+                }
+            } catch { }
+            return false;
+        }
+
+        clearStorageBtn.addEventListener('click', () => {
+            localStorage.removeItem(LS_KEY_IMAGES);
+            allImageData = [...DEFAULT_IMAGE_DATA];
+            activeTag = '全部';
+            filteredData = [...allImageData];
+            buildTagBar(); buildGallery();
+            clearStorageBtn.classList.add('hidden');
+            showBanner('🗑 已清除，恢復預設圖片', false);
+            if (isAutoRotating) startAutoRotate();
+        });
+
+        function showBanner(msg, isError = false) {
+            storageBanner.textContent = msg;
+            storageBanner.classList.toggle('error', isError);
+            storageBanner.classList.add('show');
+            clearTimeout(storageBanner._timer);
+            storageBanner._timer = setTimeout(() => storageBanner.classList.remove('show'), 2500);
+        }
+
+        // ================================================================
+        //  功能G: 圖片壓縮前處理
+        // ================================================================
+        async function compressImage(file, maxWidth = 1200, quality = 0.85) {
+            try {
+                const img = await createImageBitmap(file);
+                const ratio = Math.min(maxWidth / img.width, 1);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * ratio);
+                canvas.height = Math.round(img.height * ratio);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                return new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(), 'image/webp', quality));
+            } catch { return file; } // 失敗就用原檔
+        }
+        function blobToDataURL(blob) {
+            return new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); });
+        }
+
+        // ================================================================
+        //  圖片上傳（改為先選標籤）
+        // ================================================================
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+            if (!files.length) return;
+            openTagModal(files);
+            e.target.value = '';
+        });
+
+        async function processUpload(files, tag) {
+            stopAutoRotate();
+            allImageData = [];
+
+            // ── 功能AE：顯示進度條 ──────────────────────
+            const upBar = document.getElementById('upload-progress-bar');
+            const upFill = document.getElementById('upload-progress-fill');
+            const upLabel = document.getElementById('upload-progress-label');
+            const upCount = document.getElementById('upload-progress-count');
+            const total = files.length;
+
+            upFill.style.width = '0%';
+            upLabel.textContent = '準備載入 EXIF 解析器…';
+            upCount.textContent = `0 / ${total}`;
+            upBar.style.display = 'flex';
+            // ────────────────────────────────────────────
+
+            // 功能AB：動態載入 exifr（約 8KB ESM，僅第一次需要網路請求）
+            let exifrParse = null;
+            try {
+                const mod = await import('https://esm.sh/exifr@7/dist/lite.esm.js');
+                exifrParse = mod.parse;
+            } catch { /* 離線時降級，忽略 */ }
+
+            for (let i = 0; i < total; i++) {
+                const file = files[i];
+
+                // 功能AE：更新進度
+                const pct = Math.round((i / total) * 100);
+                upFill.style.width = `${pct}%`;
+                upLabel.textContent = `壓縮中：${file.name.replace(/\.[^.]+$/, '')}`;
+                upCount.textContent = `${i + 1} / ${total}`;
+
+                const compressed = await compressImage(file);
+                const src = await blobToDataURL(compressed);
+
+                // 功能AB：解析 EXIF
+                let date = new Date(file.lastModified).toLocaleDateString('zh-TW');
+                let camera = '';
+                if (exifrParse) {
+                    try {
+                        const exif = await exifrParse(file, {
+                            pick: ['DateTimeOriginal', 'Make', 'Model']
+                        });
+                        if (exif?.DateTimeOriginal) {
+                            date = new Date(exif.DateTimeOriginal).toLocaleDateString('zh-TW');
+                        }
+                        camera = [exif?.Make, exif?.Model].filter(Boolean).join(' ').trim();
+                    } catch { /* 無 EXIF，降級 */ }
+                }
+
+                allImageData.push({ src, title: file.name.replace(/\.[^.]+$/, ''), date, tag, camera });
+            }
+
+            // 功能AE：完成動畫
+            upFill.style.width = '100%';
+            upLabel.textContent = `✅ ${total} 張處理完成！`;
+            upCount.textContent = '';
+            setTimeout(() => { upBar.style.display = 'none'; }, 1800);
+
+            activeTag = '全部';
+            filteredData = [...allImageData];
+            buildTagBar(); buildGallery();
+            saveToLocalStorage();
+            if (isAutoRotating) startAutoRotate();
+            showBanner(`✅ 已載入 ${total} 張（WebP 壓縮）`, false);
+        }
+
+        // ================================================================
+        //  建立畫廊（使用 filteredData）
+        // ================================================================
+        function buildGallery() {
+            carousel.innerHTML = '';
+            numImages = filteredData.length;
+            if (!numImages) { carousel.innerHTML = '<p style="color:rgba(255,255,255,.3);font-size:.8rem;text-align:center;margin-top:140px;">此分類暫無圖片</p>'; return; }
+
+            theta = 360 / numImages;
+            // 正確半徑公式：由卡片寬度和張數決定，保證不重疊
+            // r = (cardW + gap) / (2 * sin(π/n))
+            const cardW = parseFloat(
+                getComputedStyle(document.documentElement).getPropertyValue('--card-w')
+            ) || 260;
+            const GAP = 24; // 卡片間距（px）
+            const r = numImages <= 1
+                ? 0
+                : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / numImages)));
+
+            filteredData.forEach((data, i) => {
+                const item = document.createElement('div');
+                item.className = 'carousel-item';
+
+                // ── 翻轉容器 ──
+                const inner = document.createElement('div');
+                inner.className = 'carousel-item-inner';
+                // 功能W：波浪進場動畫——加在 inner 避免覆蓋 item 的 3D rotateY+translateZ
+                inner.classList.add('entering-wave');
+                inner.style.animationDelay = `${i * 0.05}s`;
+
+                // ── 正面 ──
+                const front = document.createElement('div');
+                front.className = 'card-front';
+
+                const wrap = document.createElement('div');
+                wrap.className = 'img-wrap';
+
+                const img = document.createElement('img');
+                img.src = data.src; img.alt = data.title || `圖片 ${i + 1}`;
+                img.onerror = () => { img.onerror = null; img.src = `https://picsum.photos/seed/${i}/800/1200`; };
+
+                const caption = document.createElement('div');
+                caption.className = 'caption';
+                caption.innerHTML = `<p class="caption-title">${data.title || `圖片 ${i + 1}`}</p>
+                             <p class="caption-date">${data.date || ''} · ${data.tag || ''}</p>`;
+
+                const hint = document.createElement('div');
+                hint.className = 'click-hint'; hint.textContent = '🔍';
+
+                // 翻面按鈕（正面）
+                const flipBtn = document.createElement('button');
+                flipBtn.className = 'flip-btn'; flipBtn.title = '查看詳情';
+                flipBtn.textContent = '🔄';
+                flipBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.stopImmediatePropagation(); });
+                flipBtn.addEventListener('click', e => {
+                    e.stopPropagation(); e.stopImmediatePropagation();
+                    item.classList.toggle('flipped');
+                    updateThumbActive(i);
+                });
+
+                // ── 功能E: 編輯模式 — 刪除按鈕 + 拖曳 ──
+                if (editMode) {
+                    item.classList.add('edit-mode-active');
+                    item.setAttribute('draggable', 'true');
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'card-delete-btn';
+                    delBtn.title = '刪除此張';
+                    delBtn.textContent = '×';
+                    delBtn.addEventListener('mousedown', e => e.stopPropagation());
+                    delBtn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        const realIdx = allImageData.indexOf(filteredData[i]);
+                        if (realIdx >= 0) { allImageData.splice(realIdx, 1); }
+                        filteredData = activeTag === '全部' ? [...allImageData] : allImageData.filter(d => d.tag === activeTag);
+                        saveToLocalStorage();
+                        buildGallery();
+                        showBanner('🗑 已刪除', false);
+                    });
+                    item.appendChild(delBtn);
+
+                    // 拖曳事件
+                    item.addEventListener('dragstart', () => { dragSrcIndex = i; item.style.opacity = '.4'; });
+                    item.addEventListener('dragend', () => { item.style.opacity = ''; });
+                    item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
+                    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+                    item.addEventListener('drop', e => {
+                        e.preventDefault(); item.classList.remove('drag-over');
+                        if (dragSrcIndex === null || dragSrcIndex === i) return;
+                        // 在 allImageData 中找到對應實際索引
+                        const srcReal = allImageData.indexOf(filteredData[dragSrcIndex]);
+                        const dstReal = allImageData.indexOf(filteredData[i]);
+                        if (srcReal < 0 || dstReal < 0) return;
+                        [allImageData[srcReal], allImageData[dstReal]] = [allImageData[dstReal], allImageData[srcReal]];
+                        filteredData = activeTag === '全部' ? [...allImageData] : allImageData.filter(d => d.tag === activeTag);
+                        saveToLocalStorage(); buildGallery();
+                        dragSrcIndex = null;
+                    });
+                }
+
+                // ── 功能H: 批次選取 — 長按進入選取模式 ──
+                if (selectMode && selectedIndices.has(i)) item.classList.add('bulk-selected');
+                item.addEventListener('pointerdown', () => {
+                    if (editMode) return;
+                    longPressTimer = setTimeout(() => {
+                        if (!selectMode) {
+                            selectMode = true;
+                            selectedIndices.add(i);
+                            buildGallery(); // 重建顯示選取狀態
+                        }
+                        bulkBar.classList.add('show');
+                        updateBulkCount();
+                        if (isAutoRotating) stopAutoRotate();
+                    }, 500);
+                });
+                item.addEventListener('pointerup', () => clearTimeout(longPressTimer));
+                item.addEventListener('pointercancel', () => clearTimeout(longPressTimer));
+                if (selectMode) {
+                    item.addEventListener('click', e => {
+                        e.stopPropagation();
+                        if (selectedIndices.has(i)) selectedIndices.delete(i);
+                        else selectedIndices.add(i);
+                        item.classList.toggle('bulk-selected', selectedIndices.has(i));
+                        updateBulkCount();
+                    });
+                }
+
+                wrap.appendChild(img); wrap.appendChild(caption); wrap.appendChild(hint);
+                front.appendChild(wrap); front.appendChild(flipBtn);
+
+                // ── 背面 ──
+                const back = document.createElement('div');
+                back.className = 'card-back';
+                const tagIcon = data.tag ? data.tag.split(' ')[0] : '🖼️';
+                back.innerHTML = `
+                    <div class="back-icon">${tagIcon}</div>
+                    <h3 class="back-title">${data.title || `圖片 ${i + 1}`}</h3>
+                    <p class="back-date">${data.date || '—'}</p>
+                    ${data.tag ? `<div class="back-tag-badge">${data.tag}</div>` : ''}
+                    ${data.camera ? `<div class="camera-badge">📷 ${data.camera}</div>` : ''}
+                `;
+                const backFlipBtn = document.createElement('button');
+                backFlipBtn.className = 'back-flip-btn'; backFlipBtn.title = '翻回';
+                backFlipBtn.textContent = '↩️';
+                backFlipBtn.addEventListener('mousedown', e => e.stopPropagation());
+                backFlipBtn.addEventListener('click', e => { e.stopPropagation(); item.classList.remove('flipped'); });
+                back.appendChild(backFlipBtn);
+
+                inner.appendChild(front); inner.appendChild(back);
+                item.appendChild(inner);
+                item.style.transform = `rotateY(${theta * i}deg) translateZ(${r}px)`;
+
+                wrap.addEventListener('click', e => {
+                    e.stopPropagation();
+                    if (!item.classList.contains('flipped')) openLightbox(i);
+                });
+                carousel.appendChild(item);
+            });
+
+            // 重建縮圖帶
+            buildThumbStrip();
+        }
+
+        // ================================================================
+        //  功能H: 批次操作列輟助
+        // ================================================================
+        function updateBulkCount() {
+            bulkCountLabel.textContent = `已選 ${selectedIndices.size} 張`;
+        }
+        function exitSelectMode() {
+            selectMode = false; selectedIndices.clear();
+            bulkBar.classList.remove('show');
+            buildGallery();
+            if (isAutoRotating) startAutoRotate();
+        }
+        bulkSelectAll.addEventListener('click', () => {
+            filteredData.forEach((_, i) => selectedIndices.add(i));
+            updateBulkCount(); buildGallery();
+        });
+        bulkDeleteBtn.addEventListener('click', () => {
+            if (!selectedIndices.size) return;
+            if (!confirm(`確定刪除選取的 ${selectedIndices.size} 張圖片？`)) return;
+            const toRemove = [...selectedIndices].map(i => filteredData[i]);
+            allImageData = allImageData.filter(d => !toRemove.includes(d));
+            saveToLocalStorage();
+            filteredData = activeTag === '全部' ? [...allImageData] : allImageData.filter(d => d.tag === activeTag);
+            exitSelectMode();
+            buildTagBar();
+            showBanner(`🗑 已刪除 ${toRemove.length} 張`, false);
+        });
+        bulkCancelBtn.addEventListener('click', exitSelectMode);
+
+        // ================================================================
+        //  功能E: 編輯模式切換
+        // ================================================================
+        editModeBtn.addEventListener('click', () => {
+            if (selectMode) return; // 批次模式下不變更
+            editMode = !editMode;
+            editModeBtn.textContent = editMode ? '✅ 完成' : '✏️ 編輯';
+            editModeBtn.style.background = editMode ? 'rgba(251,191,36,.25)' : '';
+            buildGallery();
+            showBanner(editMode ? '✅ 編輯模式：拖曳可排序，點 × 可刪除' : '編輯模式已關閉', false);
+        });
+
+        // ================================================================
+        //  功能F: Lightbox 標題行內編輯
+        // ================================================================
+        function enableLbTitleEdit(dataIdx) {
+            lbTitle.setAttribute('contenteditable', 'true');
+            lbTitle.title = '雙擊編輯標題';
+            const commitEdit = () => {
+                const newTitle = lbTitle.textContent.trim();
+                lbTitle.removeAttribute('contenteditable');
+                if (newTitle && newTitle !== allImageData[dataIdx]?.title) {
+                    allImageData[dataIdx].title = newTitle;
+                    saveToLocalStorage();
+                    buildGallery(); // 同步卡片背面標題
+                    showBanner('✏️ 標題已更新', false);
+                }
+            };
+            lbTitle.addEventListener('blur', commitEdit, { once: true });
+            lbTitle.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbTitle.blur(); } }, { once: true });
+        }
+        // lbTitle 雙擊問题：查找影片在 allImageData 的真實索引
+        lbTitle.addEventListener('dblclick', () => {
+            const src = lbImg.src;
+            const realIdx = allImageData.findIndex(d => d.src === src);
+            if (realIdx >= 0) enableLbTitleEdit(realIdx);
+        });
+
+        // ================================================================
+        //  功能I: 自訂標籤管理
+        // ================================================================
+        function buildTagManageList() {
+            tagManageList.innerHTML = '';
+            TAGS.filter(t => t !== '全部').forEach(tag => {
+                const isDefault = DEFAULT_TAGS.includes(tag);
+                const chip = document.createElement('div');
+                chip.className = 'tag-chip' + (isDefault ? ' default' : '');
+                chip.textContent = tag;
+                if (!isDefault) {
+                    const del = document.createElement('button');
+                    del.className = 'tag-chip-del'; del.title = '刪除標籤';
+                    del.textContent = '×';
+                    del.addEventListener('click', () => {
+                        customTags = customTags.filter(t => t !== tag);
+                        syncTags();
+                        // 相關圖片標籤改為預設
+                        allImageData.forEach(d => { if (d.tag === tag) d.tag = '🎨 其他'; });
+                        saveToLocalStorage();
+                        buildTagManageList(); buildTagBar();
+                        showBanner('ꕞ️ 標籤已刪除', false);
+                    });
+                    chip.appendChild(del);
+                }
+                tagManageList.appendChild(chip);
+            });
+        }
+        function addCustomTag() {
+            const val = tagNewInput.value.trim();
+            if (!val) return;
+            if (TAGS.includes(val)) { showBanner('標籤已存在', true); return; }
+            customTags.push(val); syncTags();
+            tagNewInput.value = '';
+            buildTagManageList(); buildTagBar();
+            showBanner(`➕ 已新增標籤：${val}`, false);
+        }
+        tagAddBtn.addEventListener('click', addCustomTag);
+        tagNewInput.addEventListener('keydown', e => { if (e.key === 'Enter') addCustomTag(); });
+        tagManageBtn.addEventListener('click', () => { buildTagManageList(); tagManageModal.classList.add('open'); });
+        tagManageClose.addEventListener('click', () => tagManageModal.classList.remove('open'));
+        tagManageModal.addEventListener('click', e => { if (e.target === tagManageModal) tagManageModal.classList.remove('open'); });
+
+        // ================================================================
+        //  旋轉 & 慣性
+        // ================================================================
+        // ===== 功能A：視差偏移變數 =====
+        let parallaxX = 0, parallaxY = 0;
+
+        function applyTransform() {
+            currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
+            const pX = isDragging ? 0 : parallaxX;
+            const pY = isDragging ? 0 : parallaxY;
+            carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
+        }
+        function applyInertia() {
+            if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
+                currentRotationY += velocityX; currentRotationX += velocityY;
+                applyTransform();
+                velocityX *= 0.93; velocityY *= 0.93;
+                animationFrameId = requestAnimationFrame(applyInertia);
+            }
+        }
+
+        // ================================================================
+        //  拖曳
+        // ================================================================
+        function handleDragStart(e) {
+            if (lbOpen) return;
+            isDragging = true;
+            startX = prevX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+            startY = prevY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+            cancelAnimationFrame(animationFrameId);
+            carousel.style.transition = 'none';
+        }
+        function handleDragMove(e) {
+            if (!isDragging || lbOpen) return;
+            const cx = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+            const cy = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+            velocityX = (cx - prevX) * 0.4;
+            velocityY = (cy - prevY) * 0.2;
+            currentRotationY += velocityX; currentRotationX += velocityY;
+            applyTransform(); prevX = cx; prevY = cy;
+        }
+        function handleDragEnd() {
+            isDragging = false;
+            carousel.style.transition = 'transform 0.1s ease-out';
+            applyInertia();
+            // 拖曳結束後，如果自動旋轉開啟則延遲復原（等慣性殑滅後）
+            if (isAutoRotating) setTimeout(() => startAutoRotate(), 800);
+        }
+
+        // ================================================================
+        //  滾輪縮放
+        // ================================================================
+        document.addEventListener('wheel', e => {
+            if (lbOpen) return;
+            e.preventDefault();
+            perspective = Math.max(400, Math.min(3000, perspective + e.deltaY * 1.2));
+            scene.style.perspective = perspective + 'px';
+        }, { passive: false });
+
+        // ================================================================
+        //  鍵盤
+        // ================================================================
+        document.addEventListener('keydown', e => {
+            if (lbOpen) {
+                if (e.key === 'ArrowLeft') { e.preventDefault(); lbShowIndex(lbCurrentIndex - 1); }
+                if (e.key === 'ArrowRight') { e.preventDefault(); lbShowIndex(lbCurrentIndex + 1); }
+                if (e.key === 'Escape') closeLightbox();
+                return;
+            }
+            const step = theta || 45;
+            switch (e.key) {
+                case 'ArrowLeft': e.preventDefault(); cancelAnimationFrame(animationFrameId);
+                    currentRotationY = Math.round(currentRotationY / step) * step - step;
+                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
+                case 'ArrowRight': e.preventDefault(); cancelAnimationFrame(animationFrameId);
+                    currentRotationY = Math.round(currentRotationY / step) * step + step;
+                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
+                case 'ArrowUp': e.preventDefault();
+                    currentRotationX = Math.max(-40, currentRotationX - 8);
+                    carousel.style.transition = 'transform 0.3s ease-out'; applyTransform(); break;
+                case 'ArrowDown': e.preventDefault();
+                    currentRotationX = Math.min(40, currentRotationX + 8);
+                    carousel.style.transition = 'transform 0.3s ease-out'; applyTransform(); break;
+            }
+        });
+
+        // ================================================================
+        //  Lightbox
+        // ================================================================
+        function openLightbox(idx) {
+            lbOpen = true; lbCurrentIndex = idx;
+            cancelAnimationFrame(animationFrameId);
+            lightbox.classList.add('open');
+            lbShowIndex(idx);
+        }
+        function closeLightbox() {
+            lbOpen = false; lightbox.classList.remove('open');
+            if (isAutoRotating) setTimeout(() => { velocityX = 0.5; velocityY = 0; applyInertia(); }, 350);
+        }
+        function lbShowIndex(idx) {
+            lbCurrentIndex = ((idx % numImages) + numImages) % numImages;
+            const data = filteredData[lbCurrentIndex];
+            lbImg.style.opacity = 0;
+            lbImg.src = data.src; lbImg.alt = data.title || '';
+            lbImg.onload = () => { lbImg.style.transition = 'opacity .25s'; lbImg.style.opacity = 1; };
+            lbTitle.textContent = data.title || `圖片 ${lbCurrentIndex + 1}`;
+            lbDate.textContent = data.date || '';
+            lbTagEl.className = 'lb-tag';
+            lbTagEl.textContent = data.tag || '';
+            lbCounter.textContent = `${lbCurrentIndex + 1} / ${numImages}`;
+        }
+        lbClose.addEventListener('click', closeLightbox);
+        lbPrev.addEventListener('click', () => lbShowIndex(lbCurrentIndex - 1));
+        lbNext.addEventListener('click', () => lbShowIndex(lbCurrentIndex + 1));
+        lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+
+        // ================================================================
+        //  自動旋轉（持續固定速度）
+        // ================================================================
+        function startAutoRotate() {
+            if (autoRotateRafId) cancelAnimationFrame(autoRotateRafId);
+            function tick() {
+                if (!isDragging && !lbOpen && isAutoRotating) {
+                    currentRotationY += autoRotateSpeed;
+                    applyTransform();
+                }
+                if (isAutoRotating) autoRotateRafId = requestAnimationFrame(tick);
+            }
+            autoRotateRafId = requestAnimationFrame(tick);
+        }
+        function stopAutoRotate() {
+            if (autoRotateRafId) { cancelAnimationFrame(autoRotateRafId); autoRotateRafId = null; }
+            // 同時停止慣性
+            cancelAnimationFrame(animationFrameId);
+            velocityX = 0; velocityY = 0;
+        }
+
+        autoRotateBtn.addEventListener('click', () => {
+            isAutoRotating = !isAutoRotating;
+            rotateIcon.textContent = isAutoRotating ? '⏸' : '▶';
+            rotateLabel.textContent = isAutoRotating ? '自動旋轉' : '已暫停';
+            autoRotateBtn.classList.toggle('btn-emerald', isAutoRotating);
+            autoRotateBtn.classList.toggle('btn-slate', !isAutoRotating);
+            isAutoRotating ? startAutoRotate() : stopAutoRotate();
+        });
+
+        // 轉速滑桿（放在版型抽屜裏）
+        const lvSpeed = document.getElementById('lv-speed');
+        const lvSpeedVal = document.getElementById('lv-speed-val');
+        if (lvSpeed) {
+            lvSpeed.value = autoRotateSpeed;
+            lvSpeedVal && (lvSpeedVal.textContent = autoRotateSpeed + '度/幀');
+            lvSpeed.addEventListener('input', () => {
+                autoRotateSpeed = +lvSpeed.value;
+                lvSpeedVal && (lvSpeedVal.textContent = (+lvSpeed.value).toFixed(2) + '度/幀');
+            });
+        }
+
+        // ================================================================
+        //  功能三：Firebase 雲端相簿
+        // ================================================================
+        // 監聽登入狀態（等待 Firebase 模組初始化）
+        function initFirebase() {
+            const fb = window._fb;
+            if (!fb) { setTimeout(initFirebase, 200); return; }
+
+            const publicToggleBtn = document.getElementById('public-toggle-btn');
+
+            fb.onAuthStateChanged(fb.auth, async user => {
+                currentUser = user;
+                userAvatar.style.display = user ? 'block' : 'none';
+                logoutBtn.style.display = user ? 'inline-block' : 'none';
+                cloudSyncBtn.style.display = user ? 'inline-block' : 'none';
+                if (cloudRestoreBtn) cloudRestoreBtn.style.display = user ? 'inline-block' : 'none';
+                const _delBtn = document.getElementById('delete-all-btn');
+                if (_delBtn) _delBtn.style.display = user ? 'inline-block' : 'none';
+                loginBtn.style.display = user ? 'none' : 'inline-block';
+                // 功能AA：公開按鈕只在登入時顯示
+                if (publicToggleBtn) publicToggleBtn.style.display = user ? 'inline-block' : 'none';
+
+                if (user) {
+                    userAvatar.src = user.photoURL || '';
+                    showBanner(`👋 歡迎 ${user.displayName || '使用者'}`, false);
+
+                    // 登入後自動從雲端載入圖片
+                    await loadFromCloud();
+
+                    // 功能AA：讀取 profile.isPublic 更新按鈕狀態
+                    try {
+                        const profileDoc = await fb.getDoc(
+                            fb.doc(fb.db, `users/${user.uid}/profile/info`)
+                        );
+                        const isPublic = profileDoc.exists() ? (profileDoc.data().isPublic || false) : false;
+                        if (publicToggleBtn) {
+                            publicToggleBtn.classList.toggle('is-public', isPublic);
+                            publicToggleBtn.textContent = isPublic ? '🌐 公開中' : '🌐 公開';
+                        }
+                    } catch (e) { /* profile 不存在或讀取失敗，忽略 */ }
+                }
+            });
+
+            // 功能AA：公開相簿切換
+            publicToggleBtn && publicToggleBtn.addEventListener('click', async () => {
+                if (!currentUser) { showBanner('⚠️ 請先登入', true); return; }
+                const fb = window._fb;
+                const isNowPublic = publicToggleBtn.classList.contains('is-public');
+                const newState = !isNowPublic;
+                try {
+                    await fb.setDoc(
+                        fb.doc(fb.db, `users/${currentUser.uid}/profile/info`),
+                        {
+                            isPublic: newState,
+                            displayName: currentUser.displayName || '使用者',
+                            updatedAt: Date.now()
+                        },
+                        { merge: true }
+                    );
+                    publicToggleBtn.classList.toggle('is-public', newState);
+                    publicToggleBtn.textContent = newState ? '🌐 公開中' : '🌐 公開';
+                    showBanner(newState ? '🌐 相簿已公開！分享連結即可讓任何人瀏覽' : '🔒 相簿已設為非公開', false);
+                } catch (e) {
+                    showBanner('❌ 更新失敗：' + e.message, true);
+                }
+            });
+        }
+
+        // 手動從雲端還原
+        if (cloudRestoreBtn) {
+            cloudRestoreBtn.addEventListener('click', async () => {
+                if (!currentUser) { showBanner('⚠️ 請先登入', true); return; }
+                await loadFromCloud();
+            });
+        }
+
+        // ================================================================
+        //  一鍵刪除所有照片（本機 + 雲端）
+        // ================================================================
+        const deleteAllBtn = document.getElementById('delete-all-btn');
+        const deleteConfirmMod = document.getElementById('delete-confirm-modal');
+        const delCancelBtn = document.getElementById('del-cancel-btn');
+        const delConfirmBtn = document.getElementById('del-confirm-btn');
+
+        // 登入/登出時顯示或隱藏刪除按鈕（在 onAuthStateChanged 中已處理，這裡做備份）
+        if (deleteAllBtn) {
+            deleteAllBtn.addEventListener('click', () => {
+                if (!currentUser) { showBanner('⚠️ 請先登入', true); return; }
+                deleteConfirmMod.classList.add('show');
+            });
+        }
+        if (delCancelBtn) {
+            delCancelBtn.addEventListener('click', () => deleteConfirmMod.classList.remove('show'));
+        }
+        // 點遮罩也可關閉
+        if (deleteConfirmMod) {
+            deleteConfirmMod.addEventListener('click', (e) => {
+                if (e.target === deleteConfirmMod) deleteConfirmMod.classList.remove('show');
+            });
+        }
+
+        if (delConfirmBtn) {
+            delConfirmBtn.addEventListener('click', async () => {
+                deleteConfirmMod.classList.remove('show');
+                await deleteAllPhotos();
+            });
+        }
+
+        async function deleteAllPhotos() {
+            const fb = window._fb;
+            if (!fb || !currentUser) return;
+
+            // 顯示進度框
+            const syncOv = document.getElementById('sync-overlay');
+            const syncFl = document.getElementById('sync-fill');
+            const syncCt = document.getElementById('sync-count');
+            const syncSt = document.getElementById('sync-status');
+            const syncTi = syncOv ? syncOv.querySelector('.sync-title') : null;
+            if (syncTi) syncTi.textContent = '🗑️ 刪除中...';
+            if (syncOv) syncOv.querySelector('.sync-icon').textContent = '🗑️';
+            if (syncFl) syncFl.style.width = '0%';
+            if (syncCt) syncCt.textContent = '準備中...';
+            if (syncSt) syncSt.textContent = '正在刪除 Firestore 資料...';
+            if (syncOv) syncOv.classList.add('show');
+
+            try {
+                const uid = currentUser.uid;
+
+                // ① 刪除 Firestore 所有圖片文件
+                const snap = await fb.getDocs(fb.collection(fb.db, `users/${uid}/images`));
+                const total = snap.docs.length;
+                let done = 0;
+                for (const d of snap.docs) {
+                    await fb.deleteDoc(fb.doc(fb.db, `users/${uid}/images`, d.id));
+                    done++;
+                    if (syncCt) syncCt.textContent = `Firestore ${done} / ${total}`;
+                    if (syncFl) syncFl.style.width = `${Math.round(done / Math.max(total, 1) * 50)}%`;
+                }
+
+                // ② 刪除 Firebase Storage 資料夾內所有檔案
+                if (syncSt) syncSt.textContent = '正在刪除 Storage 檔案...';
+                try {
+                    const folderRef = fb.storageRef(fb.storage, `users/${uid}/images`);
+                    const listResult = await fb.listAll(folderRef);
+                    const files = listResult.items;
+                    done = 0;
+                    for (const fileRef of files) {
+                        await fb.deleteObject(fileRef);
+                        done++;
+                        if (syncCt) syncCt.textContent = `Storage ${done} / ${files.length}`;
+                        if (syncFl) syncFl.style.width = `${50 + Math.round(done / Math.max(files.length, 1) * 50)}%`;
+                    }
+                } catch (storErr) {
+                    // Storage 刪除失敗不阻擋（可能本來就沒有 Storage 檔案）
+                    console.warn('Storage 刪除跳過：', storErr.message);
+                }
+
+                // ③ 清除本機
+                allImageData = [];
+                filteredData = [];
+                activeTag = '全部';
+                localStorage.removeItem(LS_KEY_IMAGES);
+                buildTagBar();
+                buildGallery();
+
+                if (syncFl) syncFl.style.width = '100%';
+                if (syncCt) syncCt.textContent = '✅ 全部刪除完成';
+                if (syncSt) syncSt.textContent = '本機與雲端已清空';
+                setTimeout(() => { if (syncOv) syncOv.classList.remove('show'); }, 1200);
+                showBanner('🗑️ 已刪除所有照片', false);
+
+            } catch (e) {
+                if (syncOv) syncOv.classList.remove('show');
+                showBanner('❌ 刪除失敗：' + e.message, true);
+            }
+        }
+
+        loginBtn.addEventListener('click', async () => {
+            const fb = window._fb;
+            if (!fb) { showBanner('⚠️ Firebase 尚未設定，請填入 firebaseConfig', true); return; }
+            try {
+                await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider());
+            } catch (e) { showBanner('登入失敗：' + e.message, true); }
+        });
+
+        // 同步鎖：防止同步中途登出
+        let isSyncing = false;
+
+        // 進度條輔助工具
+        const syncOverlay = document.getElementById('sync-overlay');
+        const syncFill = document.getElementById('sync-fill');
+        const syncCount = document.getElementById('sync-count');
+        const syncStatus = document.getElementById('sync-status');
+
+        function showSyncProgress(current, total, statusText) {
+            const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+            syncFill.style.width = pct + '%';
+            syncCount.textContent = `${current} / ${total} 張（${pct}%）`;
+            syncStatus.textContent = statusText || '';
+            syncOverlay.classList.add('show');
+        }
+        function hideSyncProgress() {
+            syncOverlay.classList.remove('show');
+            syncFill.style.width = '0%';
+        }
+
+        logoutBtn.addEventListener('click', async () => {
+            const fb = window._fb;
+            if (!fb) return;
+            if (isSyncing) { showBanner('⚠️ 同步中，請稍候再登出', true); return; }
+            await fb.signOut(fb.auth);
+            showBanner('已登出', false);
+        });
+
+        // 同步上傳到雲端
+        cloudSyncBtn.addEventListener('click', async () => {
+            const fb = window._fb;
+            if (!fb || !currentUser) return;
+            if (allImageData.length === 0) { showBanner('沒有圖片可以同步', true); return; }
+            if (isSyncing) { showBanner('⏳ 同步中，請稍候…', false); return; }
+
+            isSyncing = true;
+            cloudSyncBtn.disabled = true;
+            const total = allImageData.length;
+            showSyncProgress(0, total, '準備上傳...');
+
+            try {
+                for (let i = 0; i < total; i++) {
+                    // 每張前確認仍在登入狀態
+                    if (!currentUser) {
+                        hideSyncProgress();
+                        showBanner('⚠️ 登入逾時，同步中斷', true);
+                        break;
+                    }
+
+                    const data = allImageData[i];
+                    const docId = `img_${Date.now()}_${i}`;
+                    const label = data.title || `圖片 ${i + 1}`;
+
+                    showSyncProgress(i, total, `上傳中：${label}`);
+
+                    // 若是 Base64，先上傳到 Storage
+                    let url = data.src;
+                    if (data.src.startsWith('data:')) {
+                        const blob = await (await fetch(data.src)).blob();
+                        const sRef = fb.storageRef(fb.storage,
+                            `users/${currentUser.uid}/images/${docId}`);
+                        await fb.uploadBytes(sRef, blob);
+                        url = await fb.getDownloadURL(sRef);
+                    }
+
+                    // 寫入 Firestore
+                    await fb.setDoc(
+                        fb.doc(fb.collection(fb.db, `users/${currentUser.uid}/images`), docId),
+                        { url, title: data.title, date: data.date, tag: data.tag, camera: data.camera || '', order: i }
+                    );
+
+                    showSyncProgress(i + 1, total, `✅ 已完成：${label}`);
+                }
+
+                // 完成
+                showSyncProgress(total, total, '✅ 全部同步完成！');
+                setTimeout(hideSyncProgress, 1200);
+                showBanner(`☁️ ${total} 張圖片已同步到雲端！`, false);
+            } catch (e) {
+                hideSyncProgress();
+                const msg = e.code === 'storage/unauthorized'
+                    ? '❌ 權限不足，請重新登入後再同步'
+                    : '同步失敗：' + e.message;
+                showBanner(msg, true);
+            } finally {
+                isSyncing = false;
+                cloudSyncBtn.disabled = false;
+            }
+        });
+
+        // 從雲端載入
+        async function loadFromCloud() {
+            const fb = window._fb;
+            if (!fb || !currentUser) return;
+
+            // 顯示載入進度 overlay
+            const syncOv = document.getElementById('sync-overlay');
+            const syncFl = document.getElementById('sync-fill');
+            const syncCt = document.getElementById('sync-count');
+            const syncSt = document.getElementById('sync-status');
+            const syncTi = syncOv ? syncOv.querySelector('.sync-title') : null;
+            if (syncTi) syncTi.textContent = '📲 從雲端還原...';
+            if (syncOv) syncOv.querySelector('.sync-icon').textContent = '📲';
+            if (syncFl) syncFl.style.width = '0%';
+            if (syncCt) syncCt.textContent = '查詢中...';
+            if (syncSt) syncSt.textContent = '正在讀取雲端資料...';
+            if (syncOv) syncOv.classList.add('show');
+
+            try {
+                const snap = await fb.getDocs(
+                    fb.query(fb.collection(fb.db, `users/${currentUser.uid}/images`),
+                        fb.orderBy('order')));
+
+                if (syncOv) syncOv.classList.remove('show');
+
+                if (snap.empty) {
+                    showBanner('☁️ 雲端上尚無圖片，請先同步上傳', false);
+                    return;
+                }
+
+                allImageData = snap.docs.map(d => ({
+                    src: d.data().url,
+                    title: d.data().title || '',
+                    date: d.data().date || '',
+                    tag: d.data().tag || '',
+                    camera: d.data().camera || '',
+                }));
+                activeTag = '全部';
+                filteredData = [...allImageData];
+                buildTagBar();
+                buildGallery();
+                saveToLocalStorage();
+                showBanner(`📲 雲端已還原 ${allImageData.length} 張圖片！`, false);
+            } catch (e) {
+                if (syncOv) syncOv.classList.remove('show');
+                console.warn('載入雲端失敗', e);
+                showBanner('❌ 雲端載入失敗：' + e.message, true);
+            }
+        }
+
+        // ================================================================
+        //  功能A：滑鼠跟隨視差效果
+        // ================================================================
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging || lbOpen) return;
+            const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+            const tx = ((e.clientY - cy) / cy) * -6;
+            const ty = ((e.clientX - cx) / cx) * 6;
+            parallaxX += (tx - parallaxX) * 0.1;
+            parallaxY += (ty - parallaxY) * 0.1;
+            applyTransform();
+        });
+        document.addEventListener('mouseleave', () => { parallaxX = 0; parallaxY = 0; applyTransform(); });
+
+        // ================================================================
+        //  功能B：粒子背景特效
+        // ================================================================
+        const particleCanvas = document.getElementById('particle-canvas');
+        const pCtx = particleCanvas.getContext('2d');
+        const PARTICLE_COUNT = 80;
+        let particles = [];
+
+        const THEME_RGB = {
+            cosmos: '99,102,241', sunset: '249,115,22',
+            forest: '34,197,94', rose: '236,72,153', gold: '234,179,8'
+        };
+        function getParticleRGB() {
+            return THEME_RGB[document.body.getAttribute('data-theme')] || '99,102,241';
+        }
+        function initParticles() {
+            particleCanvas.width = window.innerWidth;
+            particleCanvas.height = window.innerHeight;
+            particles = Array.from({ length: PARTICLE_COUNT }, () => ({
+                x: Math.random() * particleCanvas.width,
+                y: Math.random() * particleCanvas.height,
+                vx: (Math.random() - 0.5) * 0.35,
+                vy: (Math.random() - 0.5) * 0.35,
+                size: Math.random() * 2 + 0.5,
+                baseOpacity: Math.random() * 0.5 + 0.1,
+                phase: Math.random() * Math.PI * 2,
+            }));
+        }
+        function animateParticles(ts) {
+            pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+            const rgb = getParticleRGB();
+            const t = ts * 0.001;
+            particles.forEach(p => {
+                const alpha = p.baseOpacity * (0.5 + 0.5 * Math.sin(t * 0.8 + p.phase));
+                pCtx.beginPath();
+                pCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                pCtx.fillStyle = `rgba(${rgb},${alpha.toFixed(2)})`;
+                pCtx.fill();
+                p.x += p.vx; p.y += p.vy;
+                if (p.x < -5) p.x = particleCanvas.width + 5;
+                if (p.x > particleCanvas.width + 5) p.x = -5;
+                if (p.y < -5) p.y = particleCanvas.height + 5;
+                if (p.y > particleCanvas.height + 5) p.y = -5;
+            });
+            requestAnimationFrame(animateParticles);
+        }
+        initParticles();
+        requestAnimationFrame(animateParticles);
+
+        // ================================================================
+        //  功能C：縮圖帶
+        // ================================================================
+        let thumbStripVisible = false;
+
+        function buildThumbStrip() {
+            thumbStrip.innerHTML = '';
+            filteredData.forEach((data, i) => {
+                const el = document.createElement('div');
+                el.className = 'thumb-item';
+                const img = document.createElement('img');
+                img.src = data.src; img.alt = '';
+                img.onerror = () => { img.src = `https://picsum.photos/seed/${i}/100/120`; };
+                const num = document.createElement('div');
+                num.className = 'thumb-num'; num.textContent = i + 1;
+                el.appendChild(img); el.appendChild(num);
+                el.addEventListener('click', () => {
+                    currentRotationY = -(theta * i);
+                    carousel.style.transition = 'transform 0.6s cubic-bezier(.2,.8,.2,1)';
+                    applyTransform();
+                    updateThumbActive(i);
+                });
+                thumbStrip.appendChild(el);
+            });
+        }
+
+        function updateThumbActive(idx) {
+            thumbStrip.querySelectorAll('.thumb-item').forEach((el, i) => {
+                el.classList.toggle('active', i === idx);
+            });
+        }
+
+        thumbToggleBtn.addEventListener('click', () => {
+            thumbStripVisible = !thumbStripVisible;
+            thumbStrip.classList.toggle('visible', thumbStripVisible);
+            thumbToggleBtn.textContent = thumbStripVisible ? '🎞️ 隱藏縮圖' : '🎞️ 縮圖';
+        });
+
+        // ================================================================
+        //  拖曳 & 觸控事件
+        // ================================================================
+        document.addEventListener('mousedown', handleDragStart);
+        document.addEventListener('mousemove', handleDragMove);
+        document.addEventListener('mouseup', handleDragEnd);
+        document.addEventListener('touchstart', handleDragStart, { passive: true });
+        document.addEventListener('touchmove', handleDragMove, { passive: true });
+        document.addEventListener('touchend', handleDragEnd);
+        window.addEventListener('resize', () => { initParticles(); buildGallery(); });
+
+        // ================================================================
+        //  初始化
+        // ================================================================
+        const restored = loadFromLocalStorage();
+        if (!restored) allImageData = [...DEFAULT_IMAGE_DATA];
+        filteredData = [...allImageData];
+
+        buildTagBar();
+        buildGallery();
+        startAutoRotate();
+
+        if (restored) showBanner(`📂 已還原 ${allImageData.length} 張圖片`, false);
+
+        // Firebase 初始化（帶延遲等待模組）
+        initFirebase();
+    </script>
+
+    <!-- 功能AE：批次上傳進度條 -->
+    <div id="upload-progress-bar">
+        <div id="upload-progress-header">
+            <span id="upload-progress-label">準備中…</span>
+            <span id="upload-progress-count"></span>
+        </div>
+        <div id="upload-progress-track">
+            <div id="upload-progress-fill"></div>
+        </div>
+    </div>
+
+</body>
+
+</html>
