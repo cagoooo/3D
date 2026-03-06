@@ -2381,6 +2381,7 @@
         let autoRotateRafId = null;      // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;      // 自動旋轉速度（度/幀），可調整
         let numImages = 0, theta = 0, perRowGlobal = 1;
+        let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
         let lbCurrentIndex = 0, lbOpen = false;
 
         // 上傳暫存（等待 Modal 確認）
@@ -3025,6 +3026,7 @@
                 // 垂直偏移：多排垂直置中
                 const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
                 item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
+                item.dataset.baseAngle = thetaInRow * colInRow; // 記錄基礎角度，供深度暗化使用
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3036,6 +3038,8 @@
             // 同步全域 theta / perRowGlobal 供鍵盤步進和縮圖點擊使用
             theta = 360 / perRow;
             perRowGlobal = perRow;
+            // 快取卡片清單供深度暗化使用（避免每幀重複 querySelectorAll）
+            galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
 
             // 重建縮圖帶
             buildThumbStrip();
@@ -3162,6 +3166,17 @@
             const pX = isDragging ? 0 : parallaxX;
             const pY = isDragging ? 0 : parallaxY;
             carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
+
+            // ── 深度暗化：依各卡片面向角動態調整亮度 ──────────────────
+            // 公式：前排 (cos≈1) → brightness 1.0；後排 (cos≈-1) → brightness 0.3
+            galleryCards.forEach(card => {
+                const base = parseFloat(card.dataset.baseAngle || 0);
+                const eff = (((base + currentRotationY) % 360) + 360) % 360;
+                const rad = eff * Math.PI / 180;
+                const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+                card.style.filter = `brightness(${bright.toFixed(2)})`;
+            });
+            // ─────────────────────────────────────────────────────────────
         }
         function applyInertia() {
             if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
