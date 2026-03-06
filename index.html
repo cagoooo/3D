@@ -3480,8 +3480,19 @@
             showSyncProgress(0, total, '準備上傳...');
 
             try {
+                // ── Step 1：先刪除雲端所有舊圖片文件（避免重複）──────────────
+                showSyncProgress(0, total, '🗑️ 清除舊同步紀錄...');
+                const existingSnap = await fb.getDocs(
+                    fb.collection(fb.db, `users/${currentUser.uid}/images`)
+                );
+                if (!existingSnap.empty) {
+                    await Promise.all(existingSnap.docs.map(d => fb.deleteDoc(d.ref)));
+                }
+                // ────────────────────────────────────────────────────────────
+
+                // ── Step 2：重新上傳所有本機圖片 ────────────────────────────
+                const syncPrefix = Date.now(); // 本次同步的唯一前綴
                 for (let i = 0; i < total; i++) {
-                    // 每張前確認仍在登入狀態
                     if (!currentUser) {
                         hideSyncProgress();
                         showBanner('⚠️ 登入逾時，同步中斷', true);
@@ -3489,12 +3500,12 @@
                     }
 
                     const data = allImageData[i];
-                    const docId = `img_${Date.now()}_${i}`;
+                    const docId = `img_${syncPrefix}_${i}`;
                     const label = data.title || `圖片 ${i + 1}`;
 
                     showSyncProgress(i, total, `上傳中：${label}`);
 
-                    // 若是 Base64，先上傳到 Storage
+                    // 若已是 Storage HTTPS URL → 直接複用，不重複上傳到 Storage
                     let url = data.src;
                     if (data.src.startsWith('data:')) {
                         const blob = await (await fetch(data.src)).blob();
@@ -3502,6 +3513,9 @@
                             `users/${currentUser.uid}/images/${docId}`);
                         await fb.uploadBytes(sRef, blob);
                         url = await fb.getDownloadURL(sRef);
+
+                        // 更新記憶體中的 src，避免下次還被認為是 Base64
+                        allImageData[i] = { ...data, src: url };
                     }
 
                     // 寫入 Firestore
@@ -3512,6 +3526,10 @@
 
                     showSyncProgress(i + 1, total, `✅ 已完成：${label}`);
                 }
+                // ────────────────────────────────────────────────────────────
+
+                // 同步完成後更新 localStorage（避免下次還帶 Base64）
+                localStorage.setItem(LS_KEY_IMAGES, JSON.stringify(allImageData));
 
                 // 完成
                 showSyncProgress(total, total, '✅ 全部同步完成！');
@@ -3528,6 +3546,7 @@
                 cloudSyncBtn.disabled = false;
             }
         });
+
 
         // 從雲端載入
         async function loadFromCloud() {
