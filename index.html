@@ -739,6 +739,15 @@
             right: 16px;
         }
 
+        /* ===== 唯讀模式（分享連結）：隱藏所有管理 UI ===== */
+        .readonly-mode #user-area,
+        .readonly-mode .control-panel,
+        .readonly-mode #thumb-strip,
+        .readonly-mode #layout-drawer,
+        .readonly-mode #bulk-bar {
+            display: none !important;
+        }
+
         /* ===== 功能三：Firebase 使用者按鈕 ===== */
         #user-area {
             position: fixed;
@@ -749,6 +758,7 @@
             align-items: center;
             gap: 8px;
         }
+
 
         #user-avatar {
             width: 32px;
