@@ -2386,6 +2386,7 @@
             document.documentElement.style.setProperty('--card-w', layoutCfg.w + 'px');
             buildGallery(); if (isAutoRotating) startAutoRotate();
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+            saveLayoutToCloud();
         });
         lvHeight.addEventListener('input', () => {
             layoutCfg.h = +lvHeight.value;
@@ -2393,6 +2394,7 @@
             document.documentElement.style.setProperty('--card-h', layoutCfg.h + 'px');
             buildGallery(); if (isAutoRotating) startAutoRotate();
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+            saveLayoutToCloud();
         });
         lvPersp.addEventListener('input', () => {
             layoutCfg.persp = +lvPersp.value;
@@ -2400,13 +2402,43 @@
             perspective = layoutCfg.persp;
             scene.style.perspective = perspective + 'px';
             localStorage.setItem(LS_KEY_LAYOUT, JSON.stringify(layoutCfg));
+            saveLayoutToCloud();
         });
+
         lvReset.addEventListener('click', () => {
             layoutCfg = { ...DEFAULT_LAYOUT };
             localStorage.removeItem(LS_KEY_LAYOUT);
             applyLayoutCfg(true); // true = 需要重建畫廊
+            saveLayoutToCloud();
             showBanner('↺ 版型已還原預設', false);
         });
+
+        // ── 版型設定自動儲存到雲端(防抖 1.5s)，方案B ───────────────
+        let _saveLayoutTimer = null;
+        function saveLayoutToCloud() {
+            const fb = window._fb;
+            const user = fb && fb.auth ? fb.auth.currentUser : null;
+            if (!fb || !user) return;
+            clearTimeout(_saveLayoutTimer);
+            _saveLayoutTimer = setTimeout(async () => {
+                try {
+                    await fb.setDoc(
+                        fb.doc(fb.db, `users/${user.uid}/profile/info`),
+                        {
+                            layout: {
+                                w: layoutCfg.w,
+                                h: layoutCfg.h,
+                                persp: layoutCfg.persp,
+                                speed: autoRotateSpeed
+                            },
+                            updatedAt: Date.now()
+                        },
+                        { merge: true }
+                    );
+                } catch (e) { /* 雲端儲存失敗，非致命性錯誤，忽略 */ }
+            }, 1500);
+        }
+        // ────────────────────────────────────────────────────────────
 
         // 點擊抽屜外部關閉
         document.addEventListener('pointerdown', (e) => {
@@ -2447,6 +2479,16 @@
                     .then(doc => {
                         const data = doc.exists() ? doc.data() : {};
                         shareOwnerName.textContent = (data.displayName || '使用者') + ' 的相簿';
+
+                        // ── 套用分享者的版型設定（方案B）─────────────────────
+                        if (data.layout) {
+                            const lv = data.layout;
+                            if (lv.w) { layoutCfg.w = lv.w; document.documentElement.style.setProperty('--card-w', lv.w + 'px'); }
+                            if (lv.h) { layoutCfg.h = lv.h; document.documentElement.style.setProperty('--card-h', lv.h + 'px'); }
+                            if (lv.persp) { layoutCfg.persp = lv.persp; perspective = lv.persp; scene.style.perspective = lv.persp + 'px'; }
+                            if (lv.speed !== undefined) autoRotateSpeed = lv.speed;
+                        }
+                        // ────────────────────────────────────────────────────────────
 
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
@@ -3200,6 +3242,7 @@
             lvSpeed.addEventListener('input', () => {
                 autoRotateSpeed = +lvSpeed.value;
                 lvSpeedVal && (lvSpeedVal.textContent = (+lvSpeed.value).toFixed(2) + '度/幀');
+                saveLayoutToCloud(); // 方案B：速度也同步到雲端
             });
         }
 
