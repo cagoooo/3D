@@ -294,8 +294,34 @@
             object-fit: cover;
             pointer-events: none;
             filter: brightness(0.8);
-            transition: filter 0.3s;
+            transition: filter 0.3s, opacity 0.4s;
             display: block;
+            opacity: 1;
+        }
+
+        /* 憒加載占位骨架：圖片尚未載入時顯示淡藍色迫跳動畫 */
+        .carousel-item img[data-src] {
+            opacity: 0;
+            background: linear-gradient(110deg, #0f1729 30%, #1a2340 50%, #0f1729 70%);
+            background-size: 200% 100%;
+            animation: imgSkeleton 1.4s ease infinite;
+        }
+
+        @keyframes imgSkeleton {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        /* 圖片載入完成後淡入 */
+        .carousel-item img.lazy-loaded {
+            opacity: 1;
+            animation: none;
+            background: none;
         }
 
         .carousel-item:hover img {
@@ -3196,42 +3222,78 @@
         }
 
         // ================================================================
-        //  建立畫廊（使用 filteredData）
+        //  建立畫庫（使用 filteredData）
         // ================================================================
+
+        // IntersectionObserver 全域唱例（每次 buildGallery 重建時重置）
+        let _lazyImgObserver = null;
+
+        function _setupLazyObserver() {
+            if (_lazyImgObserver) _lazyImgObserver.disconnect();
+            _lazyImgObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    const img = entry.target;
+                    const src = img.dataset.src;
+                    if (!src) return;
+                    img.src = src;
+                    img.removeAttribute('data-src');
+                    img.classList.add('lazy-loaded');
+                    _lazyImgObserver.unobserve(img);
+                });
+            }, {
+                // rootMargin: 視域外 300px 即開始載入，避免旋転卡片的白畫麻
+                rootMargin: '300px 300px 300px 300px',
+                threshold: 0
+            });
+        }
+
+        function _observeLazyImgs() {
+            if (!_lazyImgObserver) return;
+            carousel.querySelectorAll('img[data-src]').forEach(img => {
+                _lazyImgObserver.observe(img);
+            });
+        }
+
         function buildGallery() {
+            // 重建前 disconnect 舊 Observer，防記憶體漏涌
+            if (_lazyImgObserver) _lazyImgObserver.disconnect();
+
             carousel.innerHTML = '';
             numImages = filteredData.length;
-            if (!numImages) { carousel.innerHTML = '<p style="color:rgba(255,255,255,.3);font-size:.8rem;text-align:center;margin-top:140px;">此分類暫無圖片</p>'; return; }
+            if (!numImages) {
+                carousel.innerHTML = '<p style="color:rgba(255,255,255,.3);font-size:.8rem;text-align:center;margin-top:140px;">此分類暫無圖片</p>';
+                return;
+            }
 
             const cardW = parseFloat(
                 getComputedStyle(document.documentElement).getPropertyValue('--card-w')
             ) || 260;
-            const GAP = 24;     // 卡片水平間距（px）
-            const ROW_GAP = 30; // 排與排之間垂直間距（px）
+            const GAP = 24;
+            const ROW_GAP = 30;
 
-            // ── 多排圓圈計算 ────────────────────────────────────
-            // 半徑上限：不超過透視深度的 72%，防止後排卡片超越攝影機導致翻轉
             const MAX_R = Math.min(perspective * 0.72, 3600);
-            // 依 MAX_R 計算每排最多幾張（圓周 / 卡片佔位）
             const maxPerRow = numImages <= 1
                 ? 1
                 : Math.max(3, Math.floor(2 * Math.PI * MAX_R / (cardW + GAP)));
             const perRow = Math.min(numImages, maxPerRow);
             const rowCount = Math.ceil(numImages / perRow);
-            // ────────────────────────────────────────────────────
 
-            filteredData.forEach((data, i) => {
+            // 分批參數：前 N 張同步建構（首屏可見），其餘分批補建
+            const FIRST_BATCH = Math.min(numImages, 12);
+            const CHUNK_SIZE = 8;
+
+            // 建立單張卡片 DOM 的工廠函數
+            function buildCard(i, useLazy) {
+                const data = filteredData[i];
                 const item = document.createElement('div');
                 item.className = 'carousel-item';
 
-                // ── 翻轉容器 ──
                 const inner = document.createElement('div');
                 inner.className = 'carousel-item-inner';
-                // 功能W：波浪進場動畫——加在 inner 避免覆蓋 item 的 3D rotateY+translateZ
                 inner.classList.add('entering-wave');
-                inner.style.animationDelay = `${i * 0.05}s`;
+                inner.style.animationDelay = `${Math.min(i, FIRST_BATCH - 1) * 0.05}s`;
 
-                // ── 正面 ──
                 const front = document.createElement('div');
                 front.className = 'card-front';
 
@@ -3239,8 +3301,17 @@
                 wrap.className = 'img-wrap';
 
                 const img = document.createElement('img');
-                img.src = data.src; img.alt = data.title || `圖片 ${i + 1}`;
+                img.alt = data.title || `圖片 ${i + 1}`;
                 img.onerror = () => { img.onerror = null; img.src = `https://picsum.photos/seed/${i}/800/1200`; };
+
+                if (useLazy) {
+                    // 懶加載：使用 data-src，由 IntersectionObserver 偵測從 IntersectionObserver trigger
+                    img.dataset.src = data.src;
+                } else {
+                    // 首屏第一批：直接載入
+                    img.src = data.src;
+                    img.classList.add('lazy-loaded');
+                }
 
                 const caption = document.createElement('div');
                 caption.className = 'caption';
@@ -3250,7 +3321,6 @@
                 const hint = document.createElement('div');
                 hint.className = 'click-hint'; hint.textContent = '🔍';
 
-                // 翻面按鈕（正面）
                 const flipBtn = document.createElement('button');
                 flipBtn.className = 'flip-btn'; flipBtn.title = '查看詳情';
                 flipBtn.textContent = '🔄';
@@ -3261,7 +3331,7 @@
                     updateThumbActive(i);
                 });
 
-                // ── 功能E: 編輯模式 — 刪除按鈕 + 拖曳 ──
+                // 功能E: 編輯模式 — 刪除按鈕 + 拖曳
                 if (editMode) {
                     item.classList.add('edit-mode-active');
                     item.setAttribute('draggable', 'true');
@@ -3282,7 +3352,6 @@
                     });
                     item.appendChild(delBtn);
 
-                    // 拖曳事件
                     item.addEventListener('dragstart', () => { dragSrcIndex = i; item.style.opacity = '.4'; });
                     item.addEventListener('dragend', () => { item.style.opacity = ''; });
                     item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
@@ -3290,7 +3359,6 @@
                     item.addEventListener('drop', e => {
                         e.preventDefault(); item.classList.remove('drag-over');
                         if (dragSrcIndex === null || dragSrcIndex === i) return;
-                        // 在 allImageData 中找到對應實際索引
                         const srcReal = allImageData.indexOf(filteredData[dragSrcIndex]);
                         const dstReal = allImageData.indexOf(filteredData[i]);
                         if (srcReal < 0 || dstReal < 0) return;
@@ -3301,7 +3369,7 @@
                     });
                 }
 
-                // ── 功能H: 批次選取 — 長按進入選取模式 ──
+                // 功能H: 批次選取 — 長按進入選取模式
                 if (selectMode && selectedIndices.has(i)) item.classList.add('bulk-selected');
                 item.addEventListener('pointerdown', () => {
                     if (editMode) return;
@@ -3309,7 +3377,7 @@
                         if (!selectMode) {
                             selectMode = true;
                             selectedIndices.add(i);
-                            buildGallery(); // 重建顯示選取狀態
+                            buildGallery();
                         }
                         bulkBar.classList.add('show');
                         updateBulkCount();
@@ -3331,7 +3399,7 @@
                 wrap.appendChild(img); wrap.appendChild(caption); wrap.appendChild(hint);
                 front.appendChild(wrap); front.appendChild(flipBtn);
 
-                // ── 背面 ──
+                // 背面
                 const back = document.createElement('div');
                 back.className = 'card-back';
                 const tagIcon = data.tag ? data.tag.split(' ')[0] : '🖼️';
@@ -3351,10 +3419,10 @@
 
                 inner.appendChild(front); inner.appendChild(back);
                 item.appendChild(inner);
-                // ── 計算本張卡片屬於第幾排、該排第幾格 ──
+
+                // 3D 位置計算
                 const row = Math.floor(i / perRow);
                 const colInRow = i % perRow;
-                // 最後一排可能不滿，需重算該排實際數量
                 const colsInThisRow = (row < rowCount - 1)
                     ? perRow
                     : ((numImages % perRow) || perRow);
@@ -3362,26 +3430,64 @@
                 const rInRow = colsInThisRow <= 1
                     ? 0
                     : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / colsInThisRow)));
-                // 垂直偏移：多排垂直置中
                 const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
                 item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
-                item.dataset.baseAngle = thetaInRow * colInRow; // 記錄基礎角度，供深度暗化使用
+                item.dataset.baseAngle = thetaInRow * colInRow;
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
                     if (!item.classList.contains('flipped')) openLightbox(i);
                 });
-                carousel.appendChild(item);
-            });
 
-            // 同步全域 theta / perRowGlobal 供鍵盤步進和縮圖點擊使用
+                return item;
+            }
+
+            // ── 第一批：同步建構，環境 img.src 直接載入 ──
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < FIRST_BATCH; i++) {
+                fragment.appendChild(buildCard(i, false));
+            }
+            carousel.appendChild(fragment);
+
+            // 同步更新全域狀態
             theta = 360 / perRow;
             perRowGlobal = perRow;
-            // 快取卡片清單供深度暗化使用（避免每幀重複 querySelectorAll）
             galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
-
-            // 重建縮圖帶
             buildThumbStrip();
+
+            // ── 剩餘張：用 requestIdleCallback 分批補建，不阻塑主線程 ──
+            if (numImages > FIRST_BATCH) {
+                _setupLazyObserver();
+
+                const scheduleBatch = (startIdx) => {
+                    if (startIdx >= numImages) {
+                        // 所有建構完成後重新底部查手隙
+                        buildThumbStrip();
+                        return;
+                    }
+                    const runner = () => {
+                        const batchFrag = document.createDocumentFragment();
+                        const end = Math.min(startIdx + CHUNK_SIZE, numImages);
+                        for (let i = startIdx; i < end; i++) {
+                            batchFrag.appendChild(buildCard(i, true)); // 懶加載
+                        }
+                        carousel.appendChild(batchFrag);
+                        // 更新卡片列表
+                        galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
+                        // 讀取新加入的 img[data-src]，加入監控
+                        _observeLazyImgs();
+                        scheduleBatch(end);
+                    };
+                    // 有 requestIdleCallback 就用，沒有則 setTimeout
+                    if (typeof requestIdleCallback !== 'undefined') {
+                        requestIdleCallback(runner, { timeout: 500 });
+                    } else {
+                        setTimeout(runner, 16);
+                    }
+                };
+
+                scheduleBatch(FIRST_BATCH);
+            }
         }
 
         // ================================================================
