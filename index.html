@@ -2819,6 +2819,9 @@
 
             if (!viewUid) return; // 正常模式，跳過
 
+            // ── 設定全域旗標：readonly 模式下封鎖所有干擾路徑 ──
+            window.isReadonlyMode = true;
+
             document.body.classList.add('readonly-mode');
             shareBar.classList.add('visible');
             shareOwnerName.textContent = '相簿載入中…';
@@ -2826,10 +2829,28 @@
             // 過濾標籤
             if (viewTag) activeTag = decodeURIComponent(viewTag);
 
+            // 防重入旗標 + retry 次數限制（避免手機網路不穩時無限重試）
+            let _sharedAlbumLoading = false;
+            let _sharedAlbumRetryCount = 0;
+            const MAX_RETRY = 20; // 最多等 20×300ms = 6 秒
+
             // 功能AA：使用新版 _fb API 讀取公開相簿
             const tryLoadSharedAlbum = () => {
+                // 防重入：若已在讀取中，直接忽略本次呼叫
+                if (_sharedAlbumLoading) return;
+
                 const fb = window._fb;
-                if (!fb) { setTimeout(tryLoadSharedAlbum, 300); return; }
+                if (!fb) {
+                    if (++_sharedAlbumRetryCount > MAX_RETRY) {
+                        shareOwnerName.textContent = '載入逾時';
+                        showBanner('⚠️ 網路連線逾時，請重新整理頁面', true);
+                        return;
+                    }
+                    setTimeout(tryLoadSharedAlbum, 300);
+                    return;
+                }
+
+                _sharedAlbumLoading = true; // 鎖定，防止並發呼叫
 
                 // 讀取 profile（確認 isPublic & 取得顯示名稱）
                 fb.getDoc(fb.doc(fb.db, `users/${viewUid}/profile/info`))
@@ -2876,9 +2897,12 @@
                         console.warn('載入公開相簿失敗', err);
                         shareOwnerName.textContent = '公開相簿';
                         showBanner('⚠️ 無法載入公開相簿', true);
+                        // 失敗後解鎖，允許使用者手動重試（但不自動重試）
+                        _sharedAlbumLoading = false;
                     });
             };
-            setTimeout(tryLoadSharedAlbum, 400);
+            // 等待 DOM 與 Firebase 模組穩定後再讀取（手機端略長）
+            setTimeout(tryLoadSharedAlbum, 600);
         })();
 
         // 分享按鈕：產生公開連結並複製到剪貼簿
@@ -3787,8 +3811,10 @@
                     userAvatar.src = user.photoURL || '';
                     showBanner(`👋 歡迎 ${user.displayName || '使用者'}`, false);
 
-                    // 登入後自動從雲端載入圖片
-                    await loadFromCloud();
+                    // 分享瀏覽模式（readonly）：跳過 loadFromCloud，避免覆蓋分享相簿資料
+                    if (!window.isReadonlyMode) {
+                        await loadFromCloud();
+                    }
 
                     // 功能AA：讀取 profile.isPublic 更新按鈕狀態
                     try {
@@ -4276,15 +4302,25 @@
         // ================================================================
         //  初始化
         // ================================================================
-        const restored = loadFromLocalStorage();
-        if (!restored) allImageData = [...DEFAULT_IMAGE_DATA];
-        filteredData = [...allImageData];
+        const _isReadonlyMode = !!(new URLSearchParams(location.search).get('view'));
 
-        buildTagBar();
-        buildGallery();
-        startAutoRotate();
-
-        if (restored) showBanner(`📂 已還原 ${allImageData.length} 張圖片`, false);
+        if (_isReadonlyMode) {
+            // 分享瀏覽模式：不載入本地資料，顯示「載入中」佔位，等 initReadonlyMode 完成
+            allImageData = [];
+            filteredData = [];
+            buildTagBar();
+            // 顯示載入中提示卡，讓使用者知道正在讀取
+            carousel.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:260px;gap:16px;color:rgba(255,255,255,.5);font-size:.95rem;"><div style="font-size:2rem;">🌐</div><div>載入相簿中…</div></div>';
+            startAutoRotate();
+        } else {
+            const restored = loadFromLocalStorage();
+            if (!restored) allImageData = [...DEFAULT_IMAGE_DATA];
+            filteredData = [...allImageData];
+            buildTagBar();
+            buildGallery();
+            startAutoRotate();
+            if (restored) showBanner(`📂 已還原 ${allImageData.length} 張圖片`, false);
+        }
 
         // Firebase 初始化（帶延遲等待模組）
         initFirebase();
