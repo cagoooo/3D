@@ -2881,13 +2881,21 @@
                         const data = doc.exists() ? doc.data() : {};
                         shareOwnerName.textContent = (data.displayName || '使用者') + ' 的相簿';
 
-                        // ── 套用分享者的版型設定（方案B）─────────────────────
+                        // ── 套用分享者的版型設定（全欄位）─────────────────────
                         if (data.layout) {
                             const lv = data.layout;
                             if (lv.w) { layoutCfg.w = lv.w; document.documentElement.style.setProperty('--card-w', lv.w + 'px'); }
                             if (lv.h) { layoutCfg.h = lv.h; document.documentElement.style.setProperty('--card-h', lv.h + 'px'); }
                             if (lv.persp) { layoutCfg.persp = lv.persp; perspective = lv.persp; scene.style.perspective = lv.persp + 'px'; }
                             if (lv.speed !== undefined) autoRotateSpeed = lv.speed;
+                            // ✅ 補完其餘設定
+                            if (lv.dragSens !== undefined) layoutCfg.dragSens = lv.dragSens;
+                            if (lv.touchSens !== undefined) layoutCfg.touchSens = lv.touchSens;
+                            if (lv.keySens !== undefined) layoutCfg.keySens = lv.keySens;
+                            if (lv.lightAngle !== undefined) {
+                                layoutCfg.lightAngle = lv.lightAngle;
+                                document.documentElement.style.setProperty('--light-angle', lv.lightAngle + 'deg');
+                            }
                         }
                         // ────────────────────────────────────────────────────────────
 
