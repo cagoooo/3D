@@ -3900,14 +3900,37 @@
         // ================================================================
         function startAutoRotate() {
             if (autoRotateRafId) cancelAnimationFrame(autoRotateRafId);
-            function tick() {
-                if (!isDragging && !lbOpen && isAutoRotating) {
-                    currentRotationY += autoRotateSpeed;
-                    applyTransform();
+
+            function _beginTick() {
+                function tick() {
+                    if (!isDragging && !lbOpen && isAutoRotating) {
+                        currentRotationY += autoRotateSpeed;
+                        applyTransform();
+                    }
+                    if (isAutoRotating) autoRotateRafId = requestAnimationFrame(tick);
                 }
-                if (isAutoRotating) autoRotateRafId = requestAnimationFrame(tick);
+                autoRotateRafId = requestAnimationFrame(tick);
             }
-            autoRotateRafId = requestAnimationFrame(tick);
+
+            // 🎯 等待正面卡片圖片載入完成才開始旋轉，避免使用者看到黑框轉動
+            // 取 galleryCards[0]（旋轉起點最接近正面的那張）的 img
+            const frontCard = galleryCards && galleryCards[0];
+            const frontImg = frontCard && frontCard.querySelector('img');
+
+            if (frontImg && !frontImg.classList.contains('img-loaded')) {
+                // 圖片還沒出來：先等 onload，不啟動旋轉
+                frontImg.addEventListener('load', () => {
+                    // 再次確認仍開著自動旋轉
+                    if (isAutoRotating) _beginTick();
+                }, { once: true });
+                // 若載入失敗（error）也要啟動，不能讓轉盤永遠停住
+                frontImg.addEventListener('error', () => {
+                    if (isAutoRotating) _beginTick();
+                }, { once: true });
+            } else {
+                // 圖片已載入（或沒有圖片）：直接啟動
+                _beginTick();
+            }
         }
         function stopAutoRotate() {
             if (autoRotateRafId) { cancelAnimationFrame(autoRotateRafId); autoRotateRafId = null; }
