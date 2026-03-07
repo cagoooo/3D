@@ -2601,8 +2601,9 @@
         let animationFrameId;
         let perspective = 1200;
         let isAutoRotating = true;
-        let autoRotateRafId = null;      // 自動旋轉專用 RAF ID
-        let autoRotateSpeed = 0.25;      // 自動旋轉速度（度/幀），可調整
+        let autoRotateRafId = null;        // 自動旋轉專用 RAF ID
+        let autoRotateSpeed = 0.25;        // 現在旋轉速度（動態，正就=右，負就=左）
+        const AUTO_ROTATE_BASE = 0.25;     // 基準旋轉速度（手勢結束後緊慢回歸至此値）
         let numImages = 0, theta = 0, perRowGlobal = 1;
         let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
         let lbCurrentIndex = 0, lbOpen = false;
@@ -3750,8 +3751,17 @@
             isDragging = false;
             carousel.style.transition = 'transform 0.1s ease-out';
             applyInertia();
-            // 拖曳結束後，如果自動旋轉開啟則延遲復原（等慣性殑滅後）
-            if (isAutoRotating) setTimeout(() => startAutoRotate(), 800);
+            if (isAutoRotating) {
+                // 🎯 手勢注入：用最後一次滑動的速度和方向覆寫 autoRotateSpeed
+                // velocityX 正=順時针(右)，負=逆時针(左)
+                const gestureV = Math.max(-5, Math.min(5, velocityX));
+                if (Math.abs(gestureV) > 0.15) {
+                    // 有變化才覆寫，日常輕觸不改方向
+                    autoRotateSpeed = gestureV;
+                }
+                // 立即接手自動旋轉，不再延遲
+                setTimeout(() => startAutoRotate(), 200);
+            }
         }
 
         // ================================================================
@@ -3896,7 +3906,7 @@
         lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
 
         // ================================================================
-        //  自動旋轉（持續固定速度）
+        //  自動旋轉（速度由手勢動態決定，可向左或向右）
         // ================================================================
         function startAutoRotate() {
             if (autoRotateRafId) cancelAnimationFrame(autoRotateRafId);
@@ -3904,6 +3914,11 @@
             function _beginTick() {
                 function tick() {
                     if (!isDragging && !lbOpen && isAutoRotating) {
+                        // 🎯 緩慢回歸基準速度：保持目前方向(正負)，大小每幀小幅趨近 ±BASE
+                        const targetSpeed = AUTO_ROTATE_BASE * (autoRotateSpeed >= 0 ? 1 : -1);
+                        // 高速時回歸快，接近基準時將變慢（讓加速感更流暢）
+                        const diff = targetSpeed - autoRotateSpeed;
+                        autoRotateSpeed += diff * 0.018;
                         currentRotationY += autoRotateSpeed;
                         applyTransform();
                     }
