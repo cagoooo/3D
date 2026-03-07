@@ -3750,18 +3750,16 @@
         function handleDragEnd() {
             isDragging = false;
             carousel.style.transition = 'transform 0.1s ease-out';
-            applyInertia();
-            if (isAutoRotating) {
-                // 🎯 手勢注入：用最後一次滑動的速度和方向覆寫 autoRotateSpeed
-                // velocityX 正=順時针(右)，負=逆時针(左)
-                const gestureV = Math.max(-5, Math.min(5, velocityX));
-                if (Math.abs(gestureV) > 0.15) {
-                    // 有變化才覆寫，日常輕觸不改方向
-                    autoRotateSpeed = gestureV;
-                }
-                // 立即接手自動旋轉，不再延遲
-                setTimeout(() => startAutoRotate(), 200);
+            applyInertia(); // 慕性满衰到零，自然停住
+
+            // 記憶手勢方向，供下次開啟自動旋轉時使用
+            const gestureV = Math.max(-5, Math.min(5, velocityX));
+            if (Math.abs(gestureV) > 0.15) {
+                // 將手勢速度幅度映射到 autoRotateSpeed，但不自動啟動
+                autoRotateSpeed = Math.sign(gestureV) * Math.max(AUTO_ROTATE_BASE,
+                    Math.min(1.5, Math.abs(gestureV) * 0.3));
             }
+            // ✔ 不再呼叫 startAutoRotate：滑動結束 → 恄性自然停住
         }
 
         // ================================================================
@@ -3914,11 +3912,8 @@
             function _beginTick() {
                 function tick() {
                     if (!isDragging && !lbOpen && isAutoRotating) {
-                        // 🎯 緩慢回歸基準速度：保持目前方向(正負)，大小每幀小幅趨近 ±BASE
-                        const targetSpeed = AUTO_ROTATE_BASE * (autoRotateSpeed >= 0 ? 1 : -1);
-                        // 高速時回歸快，接近基準時將變慢（讓加速感更流暢）
-                        const diff = targetSpeed - autoRotateSpeed;
-                        autoRotateSpeed += diff * 0.018;
+                        // 自動旋轉：固定 autoRotateSpeed（正=右，負=左）
+                        // 手勢方向由 handleDragEnd 注入，這裡只照用即可
                         currentRotationY += autoRotateSpeed;
                         applyTransform();
                     }
