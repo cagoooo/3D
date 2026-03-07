@@ -294,17 +294,13 @@
             object-fit: cover;
             pointer-events: none;
             filter: brightness(0.8);
-            transition: filter 0.3s, opacity 0.4s;
             display: block;
-            opacity: 1;
-        }
-
-        /* 憒加載占位骨架：圖片尚未載入時顯示淡藍色迫跳動畫 */
-        .carousel-item img[data-src] {
+            /* 所有圖片這始透明 + 骨架動畫，避免黑色空框 */
             opacity: 0;
             background: linear-gradient(110deg, #0f1729 30%, #1a2340 50%, #0f1729 70%);
             background-size: 200% 100%;
             animation: imgSkeleton 1.4s ease infinite;
+            transition: opacity 0.5s ease, filter 0.3s;
         }
 
         @keyframes imgSkeleton {
@@ -317,8 +313,8 @@
             }
         }
 
-        /* 圖片載入完成後淡入 */
-        .carousel-item img.lazy-loaded {
+        /* 圖片實際載入完成後（onload 觸發）淡入顯示 */
+        .carousel-item img.img-loaded {
             opacity: 1;
             animation: none;
             background: none;
@@ -3236,9 +3232,11 @@
                     const img = entry.target;
                     const src = img.dataset.src;
                     if (!src) return;
-                    img.src = src;
                     img.removeAttribute('data-src');
-                    img.classList.add('lazy-loaded');
+                    // 載入完成後才淡入（同樣防黑框）
+                    img.addEventListener('load', () => img.classList.add('img-loaded'), { once: true });
+                    img.addEventListener('error', () => img.classList.add('img-loaded'), { once: true });
+                    img.src = src;
                     _lazyImgObserver.unobserve(img);
                 });
             }, {
@@ -3302,15 +3300,23 @@
 
                 const img = document.createElement('img');
                 img.alt = data.title || `圖片 ${i + 1}`;
-                img.onerror = () => { img.onerror = null; img.src = `https://picsum.photos/seed/${i}/800/1200`; };
+
+                // 圖片載入完成才淡入（防止 onload 前顯示黑色空框）
+                const _onImgLoad = () => img.classList.add('img-loaded');
+                img.addEventListener('load', _onImgLoad, { once: true });
+                img.addEventListener('error', () => {
+                    img.onerror = null;
+                    img.src = `https://picsum.photos/seed/${i}/800/1200`;
+                    // fallback 也算載入，動作由 load 事件觸發 img-loaded
+                }, { once: true });
 
                 if (useLazy) {
-                    // 懶加載：使用 data-src，由 IntersectionObserver 偵測從 IntersectionObserver trigger
+                    // 懶加載： Observer 轉入視域後才設 src
                     img.dataset.src = data.src;
                 } else {
-                    // 首屏第一批：直接載入
+                    // 首屏第一批：直接載入，前 3 張提升優先度
+                    if (i < 3) img.fetchPriority = 'high';
                     img.src = data.src;
-                    img.classList.add('lazy-loaded');
                 }
 
                 const caption = document.createElement('div');
