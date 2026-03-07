@@ -3458,10 +3458,13 @@
             // ── 剩餘張：用 requestIdleCallback 分批補建，不阻塑主線程 ──
             if (numImages > FIRST_BATCH) {
                 _setupLazyObserver();
+                // 🔧 LINE WebView 修復：批次建構期間設旗標，讓 handleDragMove 暫停旋轉計算
+                window._galleryBuilding = true;
 
                 const scheduleBatch = (startIdx) => {
                     if (startIdx >= numImages) {
-                        // 所有建構完成後重新底部查手隙
+                        // 所有建構完成，解除旗標並刷新縮圖
+                        window._galleryBuilding = false;
                         buildThumbStrip();
                         return;
                     }
@@ -3469,16 +3472,13 @@
                         const batchFrag = document.createDocumentFragment();
                         const end = Math.min(startIdx + CHUNK_SIZE, numImages);
                         for (let i = startIdx; i < end; i++) {
-                            batchFrag.appendChild(buildCard(i, true)); // 懶加載
+                            batchFrag.appendChild(buildCard(i, true));
                         }
                         carousel.appendChild(batchFrag);
-                        // 更新卡片列表
                         galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
-                        // 讀取新加入的 img[data-src]，加入監控
                         _observeLazyImgs();
                         scheduleBatch(end);
                     };
-                    // 有 requestIdleCallback 就用，沒有則 setTimeout
                     if (typeof requestIdleCallback !== 'undefined') {
                         requestIdleCallback(runner, { timeout: 500 });
                     } else {
@@ -3487,6 +3487,9 @@
                 };
 
                 scheduleBatch(FIRST_BATCH);
+            } else {
+                // 圖片數量 ≤ FIRST_BATCH，直接清除旗標
+                window._galleryBuilding = false;
             }
         }
 
@@ -3710,6 +3713,8 @@
         // ================================================================
         function handleDragStart(e) {
             if (lbOpen) return;
+            // 🔧 LINE WebView 修復：多指觸控(雙指Pinch)時直接忽略，防止 touches[0] 衝突
+            if (e.touches && e.touches.length !== 1) return;
             isDragging = true;
             startX = prevX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
             startY = prevY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
@@ -3718,10 +3723,15 @@
         }
         function handleDragMove(e) {
             if (!isDragging || lbOpen || isPinching) return;
+            // 🔧 LINE WebView 修復：批次建構期間凍結旋轉計算，避免 DOM mutate + 動畫同時觸發 OOM
+            if (window._galleryBuilding) return;
             const isTouch = e.type.includes('touch');
+            // 🔧 LINE WebView 修復：多指時直接忽略（Pinch 轉換期保護）
+            if (isTouch && e.touches.length !== 1) return;
+            // 統一在此 preventDefault，避免瀏覽器 passive 衝突警告
+            if (isTouch) e.preventDefault();
             const cx = isTouch ? e.touches[0].pageX : e.pageX;
             const cy = isTouch ? e.touches[0].pageY : e.pageY;
-            // AS: 拖曳 / 觸控分別靈敏度
             const sens = isTouch
                 ? (layoutCfg.touchSens ?? 1.0)
                 : (layoutCfg.dragSens ?? 1.0);
@@ -4432,7 +4442,9 @@
         document.addEventListener('mousemove', handleDragMove);
         document.addEventListener('mouseup', handleDragEnd);
         document.addEventListener('touchstart', handleDragStart, { passive: true });
-        document.addEventListener('touchmove', handleDragMove, { passive: true });
+        // 🔧 LINE WebView 修復：統一改為 passive:false，確保 handleDragMove 內的
+        // e.preventDefault() 有效，避免同元素混用 passive/non-passive 導致 WebView 崩潰
+        document.addEventListener('touchmove', handleDragMove, { passive: false });
         document.addEventListener('touchend', handleDragEnd);
         window.addEventListener('resize', () => { initParticles(); buildGallery(); });
 
