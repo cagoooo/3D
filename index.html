@@ -2915,6 +2915,8 @@
                         filteredData = activeTag === '全部' ? [...allImageData]
                             : allImageData.filter(d => d.tag === activeTag);
                         buildTagBar(); buildGallery();
+                        // 畫庫建構完成後才真正啟動旋轉（圖片尚未載入時會由 startAutoRotate 內部等待）
+                        if (isAutoRotating) startAutoRotate();
                     })
                     .catch(err => {
                         console.warn('載入公開相簿失敗', err);
@@ -3884,7 +3886,12 @@
         }
         function closeLightbox() {
             lbOpen = false; lightbox.classList.remove('open');
-            if (isAutoRotating) setTimeout(() => { velocityX = 0.5; velocityY = 0; applyInertia(); }, 350);
+            if (isAutoRotating) setTimeout(() => {
+                // 門閉燈筱後給予錇系重啟，方向跟隨最後一次手勢（不再硬寫向右）
+                velocityX = Math.sign(autoRotateSpeed || 1) * 0.5;
+                velocityY = 0;
+                applyInertia();
+            }, 350);
         }
         function lbShowIndex(idx) {
             lbCurrentIndex = ((idx % numImages) + numImages) % numImages;
@@ -4499,7 +4506,7 @@
             buildTagBar();
             // 顯示載入中提示卡，讓使用者知道正在讀取
             carousel.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:260px;gap:16px;color:rgba(255,255,255,.5);font-size:.95rem;"><div style="font-size:2rem;">🌐</div><div>載入相簿中…</div></div>';
-            startAutoRotate();
+            // ❗ 不在此啟動 RAF：畫庫尚未建構，等 buildGallery 完成後才啟動
         } else {
             const restored = loadFromLocalStorage();
             if (!restored) allImageData = [...DEFAULT_IMAGE_DATA];
