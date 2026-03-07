@@ -1230,23 +1230,25 @@
                 /* 展開：足夠容納所有按鈕 */
             }
 
-            /* 折疊把手條 */
+            /* 折疊把手條（放大可點擊區域，更好按） */
             .panel-handle {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 4px;
-                padding: 8px 12px 6px;
+                gap: 5px;
+                padding: 12px 20px 10px;
                 cursor: pointer;
                 user-select: none;
                 -webkit-user-select: none;
+                min-height: 52px;
+                justify-content: center;
             }
 
             .panel-handle-bar {
-                width: 40px;
-                height: 4px;
+                width: 48px;
+                height: 5px;
                 border-radius: 99px;
-                background: rgba(255, 255, 255, 0.35);
+                background: rgba(255, 255, 255, 0.45);
                 flex-shrink: 0;
             }
 
@@ -1276,11 +1278,11 @@
                 padding: 2px 12px;
             }
 
-            /* 展開箭頭 */
+            /* 展開箭頭（放大，更好辨識） */
             .panel-handle::after {
                 content: '▲';
-                font-size: 0.6rem;
-                color: rgba(255, 255, 255, 0.4);
+                font-size: 1rem;
+                color: rgba(255, 255, 255, 0.55);
                 transition: transform 0.35s ease;
                 line-height: 1;
             }
@@ -4293,6 +4295,11 @@
 
         // 手機版折疊抽屜：點擊把手切換展開/折疊
         function isMobile() { return window.innerWidth <= 768; }
+
+        // 手機版預設展開，讓第一次進入的使用者看到功能列
+        if (isMobile() && _panel) {
+            _panel.classList.add('panel-expanded');
+        }
 
         if (_panelHandle) {
             _panelHandle.addEventListener('click', () => {
