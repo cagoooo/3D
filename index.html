@@ -3744,16 +3744,21 @@
         document.addEventListener('wheel', e => {
             if (lbOpen) return;
             e.preventDefault();
-            perspective = Math.max(400, Math.min(3000, perspective + e.deltaY * 1.2));
+            // 展間上限從 3000 → 8000，支援「拉到很遠看全局」
+            perspective = Math.max(400, Math.min(8000, perspective + e.deltaY * 1.2));
             scene.style.perspective = perspective + 'px';
+            // 記憶滞輪調後的景深到 layoutCfg
+            layoutCfg.persp = perspective;
         }, { passive: false });
 
         // ================================================================
-        //  雙指 Pinch 縮放（手機 / 平板端，等同滾輪縮放）
+        //  雙指 Pinch 縮放（手機 / 平板端）
+        //  支援「往外拉很遠」：perspective 4,000~8,000px
         // ================================================================
         let pinchStartDist = 0;
         let pinchStartPersp = 1200;
         let isPinching = false;
+        let _pinchEaseRaf = null; // 緩動動畫 frame
 
         function getTouchDist(touches) {
             const dx = touches[0].clientX - touches[1].clientX;
@@ -3766,6 +3771,8 @@
                 isPinching = true;
                 pinchStartDist = getTouchDist(e.touches);
                 pinchStartPersp = perspective;
+                // 停止緩動動畫，避免跟手變衝突
+                if (_pinchEaseRaf) { cancelAnimationFrame(_pinchEaseRaf); _pinchEaseRaf = null; }
                 // 阻止雙指觸發單指拖曳
                 isDragging = false;
                 cancelAnimationFrame(animationFrameId);
@@ -3776,15 +3783,39 @@
             if (!isPinching || e.touches.length !== 2) return;
             e.preventDefault(); // 阻止瀏覽器預設的頁面縮放
             const dist = getTouchDist(e.touches);
-            const scale = pinchStartDist / dist; // 縮小 > 1，放大 < 1
-            // Pinch 縮小 → perspective 變大（景深推遠）；放大 → perspective 縮小（景深拉近）
-            perspective = Math.max(400, Math.min(3000, pinchStartPersp * scale));
+            // 縮小 > 1（往外拉）→ perspective 變大（推遠）
+            // 放大 < 1（往內拉）→ perspective 變小（拉近）
+            const rawScale = pinchStartDist / dist;
+            // 增強感原係數：讓手勢感覺更宬闊
+            const SENSITIVITY = 1.6;
+            const amplified = 1 + (rawScale - 1) * SENSITIVITY;
+            // 展間 8000px，對應「拉到很遠看全局」的需求
+            perspective = Math.max(400, Math.min(8000, pinchStartPersp * amplified));
             scene.style.perspective = perspective + 'px';
         }, { passive: false });
 
         document.addEventListener('touchend', e => {
-            if (e.touches.length < 2) {
+            if (e.touches.length < 2 && isPinching) {
                 isPinching = false;
+                // ── Pinch 結束後緩動回彈（若超出小界 400px 或大界 8000px 才回彈） ──
+                const target = Math.max(400, Math.min(8000, perspective));
+                let current = perspective;
+
+                const ease = () => {
+                    current += (target - current) * 0.12;
+                    if (Math.abs(current - target) < 0.5) {
+                        current = target;
+                        scene.style.perspective = current + 'px';
+                        perspective = current;
+                        // 記憶到 layoutCfg，不重建 gallery
+                        layoutCfg.persp = Math.round(current);
+                        _pinchEaseRaf = null;
+                        return;
+                    }
+                    scene.style.perspective = current + 'px';
+                    _pinchEaseRaf = requestAnimationFrame(ease);
+                };
+                _pinchEaseRaf = requestAnimationFrame(ease);
             }
         }, { passive: true });
 
