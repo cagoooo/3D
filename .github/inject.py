@@ -9,6 +9,7 @@ replacements = {
     '__FIREBASE_STORAGE_BUCKET__':     os.getenv('FIREBASE_STORAGE_BUCKET', '').strip(),
     '__FIREBASE_MESSAGING_SENDER_ID__': os.getenv('FIREBASE_MESSAGING_SENDER_ID', '').strip(),
     '__FIREBASE_APP_ID__':             os.getenv('FIREBASE_APP_ID', '').strip(),
+    '__SITE_URL__':                    os.getenv('SITE_URL', 'https://cagoooo.github.io/3D/').strip(),
 }
 
 for placeholder, value in replacements.items():
