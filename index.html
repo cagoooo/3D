@@ -2630,7 +2630,7 @@
         let isAutoRotating = true;
         let autoRotateRafId = null;        // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;        // 現在旋轉速度（動態，正就=右，負就=左）
-        const AUTO_ROTATE_BASE = 0.25;     // 基準旋轉速度（手勢結束後緊慢回歸至此値）
+        let autoRotateBase = 0.25;         // 使用者設定的基準速度（滑桿 + 分享設定同步）
         let numImages = 0, theta = 0, perRowGlobal = 1;
         let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
         let lbCurrentIndex = 0, lbOpen = false;
@@ -2832,7 +2832,7 @@
                                 w: layoutCfg.w,
                                 h: layoutCfg.h,
                                 persp: layoutCfg.persp,
-                                speed: autoRotateSpeed,
+                                speed: autoRotateBase,  // 存使用者設定的基準速度（非受慣性影響的動態值）
                                 dragSens: layoutCfg.dragSens || 1.0,
                                 touchSens: layoutCfg.touchSens || 1.0,
                                 keySens: layoutCfg.keySens || 1,
@@ -2914,7 +2914,10 @@
                             if (lv.w) { layoutCfg.w = lv.w; document.documentElement.style.setProperty('--card-w', lv.w + 'px'); }
                             if (lv.h) { layoutCfg.h = lv.h; document.documentElement.style.setProperty('--card-h', lv.h + 'px'); }
                             if (lv.persp) { layoutCfg.persp = lv.persp; perspective = lv.persp; scene.style.perspective = lv.persp + 'px'; }
-                            if (lv.speed !== undefined) autoRotateSpeed = lv.speed;
+                            if (lv.speed !== undefined) {
+                                autoRotateBase = lv.speed;    // ★ 必須同時更新基準速度，否則 tick 迴圈每幀把速度拉回預設 0.25
+                                autoRotateSpeed = lv.speed;
+                            }
                             // ✅ 補完其餘設定
                             if (lv.dragSens !== undefined) layoutCfg.dragSens = lv.dragSens;
                             if (lv.touchSens !== undefined) layoutCfg.touchSens = lv.touchSens;
@@ -3805,7 +3808,7 @@
                 // 🎯 有效甜動：更新自動旋轉方向和初始速度
                 // 速度幅度映射：甜動越快，初始旋轉越快（最大 1.5）
                 autoRotateSpeed = Math.sign(gestureV) *
-                    Math.max(AUTO_ROTATE_BASE, Math.min(1.5, Math.abs(gestureV) * 0.32));
+                    Math.max(autoRotateBase, Math.min(1.5, Math.abs(gestureV) * 0.32));
                 // 設旗標：恳性衰滅完後由 applyInertia 重啟自動旋轉
                 window._restartAutoRotate = true;
             }
@@ -3914,7 +3917,7 @@
                     currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) - step;
                     carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform();
                     // ⬅ 切換為向左持續旋轉
-                    autoRotateSpeed = -AUTO_ROTATE_BASE;
+                    autoRotateSpeed = -autoRotateBase;
                     window._restartAutoRotate = true;
                     setTimeout(() => { if (window._restartAutoRotate && isAutoRotating) { window._restartAutoRotate = false; startAutoRotate(); } }, 550);
                     break;
@@ -3924,7 +3927,7 @@
                     currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) + step;
                     carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform();
                     // ➡ 切換為向右持續旋轉
-                    autoRotateSpeed = AUTO_ROTATE_BASE;
+                    autoRotateSpeed = autoRotateBase;
                     window._restartAutoRotate = true;
                     setTimeout(() => { if (window._restartAutoRotate && isAutoRotating) { window._restartAutoRotate = false; startAutoRotate(); } }, 550);
                     break;
@@ -3983,7 +3986,7 @@
                     if (!isDragging && !lbOpen && isAutoRotating) {
                         // 自動旋轉：每幀緩慢回歸基準速度（保持方向，落傅御到 AUTO_ROTATE_BASE）
                         // 甜動後 autoRotateSpeed 可能很大，經由緩降讓込燈座感更自然
-                        const targetSpeed = AUTO_ROTATE_BASE * (autoRotateSpeed >= 0 ? 1 : -1);
+                        const targetSpeed = autoRotateBase * (autoRotateSpeed >= 0 ? 1 : -1);  // 用可變的 autoRotateBase
                         autoRotateSpeed += (targetSpeed - autoRotateSpeed) * 0.025;
                         currentRotationY += autoRotateSpeed;
                         applyTransform();
@@ -4036,7 +4039,8 @@
             lvSpeed.value = autoRotateSpeed;
             lvSpeedVal && (lvSpeedVal.textContent = autoRotateSpeed + '度/幀');
             lvSpeed.addEventListener('input', () => {
-                autoRotateSpeed = +lvSpeed.value;
+                autoRotateBase = +lvSpeed.value;   // ★ 同步更新基準速度，tick 迴圈才會以此值為目標
+                autoRotateSpeed = +lvSpeed.value;  // 同步設定當前速度，立即生效
                 lvSpeedVal && (lvSpeedVal.textContent = (+lvSpeed.value).toFixed(2) + '度/幀');
                 saveLayoutToCloud(); // 方案B：速度也同步到雲端
             });
