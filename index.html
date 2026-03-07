@@ -3712,8 +3712,14 @@
                 velocityX *= 0.93; velocityY *= 0.93;
                 animationFrameId = requestAnimationFrame(applyInertia);
             } else {
-                // AY: 慣性幾乎停止時，自動 Snap 到最近卡片
+                // 慕性完全衰滅：Snap 到最近卡片後，再决定是否重啟自動旋轉
                 snapToNearest();
+                // 對有效用力的甜動（_restartAutoRotate 指標），恳性完劂完才重啟
+                // 這樣能避免恳性與自動旋轉 RAF 同時執行造成抖動
+                if (window._restartAutoRotate && isAutoRotating) {
+                    window._restartAutoRotate = false;
+                    startAutoRotate();
+                }
             }
         }
 
@@ -3722,12 +3728,14 @@
         // ================================================================
         function handleDragStart(e) {
             if (lbOpen) return;
-            // 🔧 LINE WebView 修復：多指觸控(雙指Pinch)時直接忽略，防止 touches[0] 衝突
+            // 🔧 LINE WebView 修復：多指觸控(Pinch)時直接忽略，防止 touches[0] 衝突
             if (e.touches && e.touches.length !== 1) return;
             isDragging = true;
             startX = prevX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
             startY = prevY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
-            cancelAnimationFrame(animationFrameId);
+            cancelAnimationFrame(animationFrameId); // 停止恳性
+            stopAutoRotate();                       // 停止自動旋轉 RAF（修復 tick 覆蓋手勢問題）
+            window._restartAutoRotate = false;     // 清除上次恳動旗標
             carousel.style.transition = 'none';
         }
         function handleDragMove(e) {
@@ -3752,16 +3760,21 @@
         function handleDragEnd() {
             isDragging = false;
             carousel.style.transition = 'transform 0.1s ease-out';
-            applyInertia(); // 慕性满衰到零，自然停住
+            applyInertia(); // 恳性自然衰滅
 
-            // 記憶手勢方向，供下次開啟自動旋轉時使用
+            // 計算手勢速度
             const gestureV = Math.max(-5, Math.min(5, velocityX));
-            if (Math.abs(gestureV) > 0.15) {
-                // 將手勢速度幅度映射到 autoRotateSpeed，但不自動啟動
-                autoRotateSpeed = Math.sign(gestureV) * Math.max(AUTO_ROTATE_BASE,
-                    Math.min(1.5, Math.abs(gestureV) * 0.3));
+            const FLING_THRESHOLD = 0.45; // 有效甜動的最小速度
+
+            if (Math.abs(gestureV) > FLING_THRESHOLD) {
+                // 🎯 有效甜動：更新自動旋轉方向和初始速度
+                // 速度幅度映射：甜動越快，初始旋轉越快（最大 1.5）
+                autoRotateSpeed = Math.sign(gestureV) *
+                    Math.max(AUTO_ROTATE_BASE, Math.min(1.5, Math.abs(gestureV) * 0.32));
+                // 設旗標：恳性衰滅完後由 applyInertia 重啟自動旋轉
+                window._restartAutoRotate = true;
             }
-            // ✔ 不再呼叫 startAutoRotate：滑動結束 → 恄性自然停住
+            // 按住放開 (速度 ≤ 0.45)：純恳性小，snap 後停住不動
         }
 
         // ================================================================
@@ -3919,8 +3932,10 @@
             function _beginTick() {
                 function tick() {
                     if (!isDragging && !lbOpen && isAutoRotating) {
-                        // 自動旋轉：固定 autoRotateSpeed（正=右，負=左）
-                        // 手勢方向由 handleDragEnd 注入，這裡只照用即可
+                        // 自動旋轉：每幀緩慢回歸基準速度（保持方向，落傅御到 AUTO_ROTATE_BASE）
+                        // 甜動後 autoRotateSpeed 可能很大，經由緩降讓込燈座感更自然
+                        const targetSpeed = AUTO_ROTATE_BASE * (autoRotateSpeed >= 0 ? 1 : -1);
+                        autoRotateSpeed += (targetSpeed - autoRotateSpeed) * 0.025;
                         currentRotationY += autoRotateSpeed;
                         applyTransform();
                     }
