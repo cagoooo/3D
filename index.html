@@ -3873,12 +3873,26 @@
             const keySens = layoutCfg.keySens || 1;
             const step = (theta || 45) * keySens;
             switch (e.key) {
-                case 'ArrowLeft': e.preventDefault(); cancelAnimationFrame(animationFrameId);
+                case 'ArrowLeft': e.preventDefault();
+                    cancelAnimationFrame(animationFrameId);
+                    stopAutoRotate();
                     currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) - step;
-                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
-                case 'ArrowRight': e.preventDefault(); cancelAnimationFrame(animationFrameId);
+                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform();
+                    // ⬅ 切換為向左持續旋轉
+                    autoRotateSpeed = -AUTO_ROTATE_BASE;
+                    window._restartAutoRotate = true;
+                    setTimeout(() => { if (window._restartAutoRotate && isAutoRotating) { window._restartAutoRotate = false; startAutoRotate(); } }, 550);
+                    break;
+                case 'ArrowRight': e.preventDefault();
+                    cancelAnimationFrame(animationFrameId);
+                    stopAutoRotate();
                     currentRotationY = Math.round(currentRotationY / (theta || 45)) * (theta || 45) + step;
-                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform(); break;
+                    carousel.style.transition = 'transform 0.5s cubic-bezier(.2,.8,.2,1)'; applyTransform();
+                    // ➡ 切換為向右持續旋轉
+                    autoRotateSpeed = AUTO_ROTATE_BASE;
+                    window._restartAutoRotate = true;
+                    setTimeout(() => { if (window._restartAutoRotate && isAutoRotating) { window._restartAutoRotate = false; startAutoRotate(); } }, 550);
+                    break;
                 case 'ArrowUp': e.preventDefault();
                     currentRotationX = Math.max(-40, currentRotationX - 8);
                     carousel.style.transition = 'transform 0.3s ease-out'; applyTransform(); break;
