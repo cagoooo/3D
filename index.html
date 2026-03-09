@@ -3795,24 +3795,41 @@
             currentRotationY += velocityX; currentRotationX += velocityY;
             applyTransform(); prevX = cx; prevY = cy;
         }
-        function handleDragEnd() {
+        function handleDragEnd(e) {
+            if (!isDragging) return;
             isDragging = false;
+
+            // 計算移動距離分辨是點擊還是滑動
+            const dist = Math.hypot(prevX - startX, prevY - startY);
+
+            if (dist < 5) {
+                // 判定為點擊
+                // 只有點擊背景(非卡片)時，才暫停旋轉 (點擊卡片會開啟大圖)
+                const isCard = e && e.target && e.target.closest('.carousel-item');
+                if (!isCard && isAutoRotating) {
+                    isAutoRotating = false;
+                    rotateIcon.textContent = '▶';
+                    rotateLabel.textContent = '已暫停';
+                    autoRotateBtn.classList.remove('btn-emerald');
+                    autoRotateBtn.classList.add('btn-slate');
+                    stopAutoRotate();
+                }
+            } else {
+                // 判定為滑動：強制開啟自動旋轉並更新按鈕 UI
+                isAutoRotating = true;
+                rotateIcon.textContent = '⏸';
+                rotateLabel.textContent = '自動旋轉';
+                autoRotateBtn.classList.add('btn-emerald');
+                autoRotateBtn.classList.remove('btn-slate');
+
+                // 設定依據滑動方向的速度，給予最小初始速度
+                const gestureV = velocityX || (Math.sign(prevX - startX) * 0.5) || 1;
+                autoRotateSpeed = Math.sign(gestureV) * Math.max(autoRotateBase, Math.min(1.5, Math.abs(gestureV) * 0.32));
+                window._restartAutoRotate = true; // 讓 applyInertia 結束後接手旋轉
+            }
+
             carousel.style.transition = 'transform 0.1s ease-out';
             applyInertia(); // 恳性自然衰滅
-
-            // 計算手勢速度
-            const gestureV = Math.max(-5, Math.min(5, velocityX));
-            const FLING_THRESHOLD = 0.45; // 有效甜動的最小速度
-
-            if (Math.abs(gestureV) > FLING_THRESHOLD) {
-                // 🎯 有效甜動：更新自動旋轉方向和初始速度
-                // 速度幅度映射：甜動越快，初始旋轉越快（最大 1.5）
-                autoRotateSpeed = Math.sign(gestureV) *
-                    Math.max(autoRotateBase, Math.min(1.5, Math.abs(gestureV) * 0.32));
-                // 設旗標：恳性衰滅完後由 applyInertia 重啟自動旋轉
-                window._restartAutoRotate = true;
-            }
-            // 按住放開 (速度 ≤ 0.45)：純恳性小，snap 後停住不動
         }
 
         // ================================================================
@@ -4001,7 +4018,7 @@
             const frontCard = galleryCards && galleryCards[0];
             const frontImg = frontCard && frontCard.querySelector('img');
 
-            if (frontImg && !frontImg.classList.contains('img-loaded')) {
+            if (frontImg && !frontImg.complete && !frontImg.classList.contains('img-loaded')) {
                 // 圖片還沒出來：先等 onload，不啟動旋轉
                 frontImg.addEventListener('load', () => {
                     // 再次確認仍開著自動旋轉
