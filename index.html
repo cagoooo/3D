@@ -3306,41 +3306,63 @@
         //  建立畫庫（使用 filteredData）
         // ================================================================
 
-        // IntersectionObserver 全域唱例（每次 buildGallery 重建時重置）
-        let _lazyImgObserver = null;
+        // ================================================================
+        //  角度優先載入系統（取代 IntersectionObserver）
+        //
+        //  問題根源：所有卡片皆為 position:absolute top:0 left:0，
+        //  2D 位置完全重疊在畫面中心。IntersectionObserver 無法感知
+        //  CSS 3D transform 後的視覺位置，導致一次觸發全部 40+ 張，
+        //  瀏覽器同時發出 40 個請求 → 頻寬競爭 → 每張都讀得很慢。
+        //
+        //  解法：依各卡片目前面向角度排序，離正面最近的先下載；
+        //  限制並發數（手機 3 / 桌機 5），確保正面卡片快速出現。
+        // ================================================================
+        let _imgLoadQueue  = [];
+        let _imgLoadingCount = 0;
+        let _imgLoadGen    = 0;   // buildGallery 重建時遞增，舊 callback 自動失效
+        const _IMG_MAX_CONCURRENT = _isMobileDevice ? 3 : 5;
 
-        function _setupLazyObserver() {
-            if (_lazyImgObserver) _lazyImgObserver.disconnect();
-            _lazyImgObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (!entry.isIntersecting) return;
-                    const img = entry.target;
-                    const src = img.dataset.src;
-                    if (!src) return;
-                    img.removeAttribute('data-src');
-                    // 載入完成後才淡入（同樣防黑框）
-                    img.addEventListener('load', () => img.classList.add('img-loaded'), { once: true });
-                    img.addEventListener('error', () => img.classList.add('img-loaded'), { once: true });
-                    img.src = src;
-                    _lazyImgObserver.unobserve(img);
-                });
-            }, {
-                // rootMargin: 視域外 300px 即開始載入，避免旋転卡片的白畫麻
-                rootMargin: '300px 300px 300px 300px',
-                threshold: 0
-            });
+        function _flushImgQueue() {
+            while (_imgLoadingCount < _IMG_MAX_CONCURRENT && _imgLoadQueue.length > 0) {
+                const img = _imgLoadQueue.shift();
+                if (!img || !img.dataset.src) continue; // 已被其他路徑載入
+                const myGen = _imgLoadGen;
+                _imgLoadingCount++;
+                const src = img.dataset.src;
+                img.removeAttribute('data-src');
+                const done = () => {
+                    if (_imgLoadGen !== myGen) return; // 畫廊已重建，忽略舊 callback
+                    img.classList.add('img-loaded');
+                    _imgLoadingCount--;
+                    _flushImgQueue(); // 一張完成，立即補進下一張
+                };
+                img.addEventListener('load',  done, { once: true });
+                img.addEventListener('error', done, { once: true });
+                img.src = src;
+            }
         }
 
-        function _observeLazyImgs() {
-            if (!_lazyImgObserver) return;
-            carousel.querySelectorAll('img[data-src]').forEach(img => {
-                _lazyImgObserver.observe(img);
-            });
+        // 依旋轉角度重新排序佇列，最靠正面（dist 最小）的先下載
+        function _loadByAngle() {
+            if (!galleryCards.length) return;
+            const rotY = currentRotationY;
+            _imgLoadQueue = galleryCards
+                .map(card => {
+                    const base = card._baseAngle || 0;
+                    const eff  = ((base + rotY) % 360 + 360) % 360;
+                    return { img: card.querySelector('img[data-src]'), dist: Math.min(eff, 360 - eff) };
+                })
+                .filter(x => x.img)                // 只保留尚未載入的
+                .sort((a, b) => a.dist - b.dist)   // 正面優先
+                .map(x => x.img);
+            _flushImgQueue();
         }
 
         function buildGallery() {
-            // 重建前 disconnect 舊 Observer，防記憶體漏涌
-            if (_lazyImgObserver) _lazyImgObserver.disconnect();
+            // 重建時遞增世代，讓所有舊的載入 callback 自動失效
+            _imgLoadGen++;
+            _imgLoadQueue     = [];
+            _imgLoadingCount  = 0;
             // 重置 card-focused 快取，舊 DOM 元素已失效
             _prevFrontCardEl = null;
 
@@ -3552,15 +3574,15 @@
 
             // ── 剩餘張：用 requestIdleCallback 分批補建，不阻塑主線程 ──
             if (numImages > FIRST_BATCH) {
-                _setupLazyObserver();
                 // 🔧 LINE WebView 修復：批次建構期間設旗標，讓 handleDragMove 暫停旋轉計算
                 window._galleryBuilding = true;
 
                 const scheduleBatch = (startIdx) => {
                     if (startIdx >= numImages) {
-                        // 所有建構完成，解除旗標並刷新縮圖
+                        // 所有建構完成，解除旗標、刷新縮圖、最終排序一次載入佇列
                         window._galleryBuilding = false;
                         buildThumbStrip();
+                        _loadByAngle(); // 全部卡片都建好後，依角度做一次完整排序
                         return;
                     }
                     const runner = () => {
@@ -3571,7 +3593,7 @@
                         }
                         carousel.appendChild(batchFrag);
                         galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
-                        _observeLazyImgs();
+                        _loadByAngle(); // 每批建好立即排序，正面卡片最先入佇列
                         scheduleBatch(end);
                     };
                     if (typeof requestIdleCallback !== 'undefined') {
@@ -3823,8 +3845,12 @@
             carousel.style.transition = 'transform 0.38s cubic-bezier(.2,.8,.2,1)';
             currentRotationY = nearest;
             applyTransform();
-            // 吸附完成後移除過渡動畫
-            setTimeout(() => { carousel.style.transition = ''; }, 400);
+            // 吸附完成後移除過渡動畫，並依新角度重排載入佇列
+            // 讓剛轉到正面的卡片圖片排到佇列最前端立即下載
+            setTimeout(() => {
+                carousel.style.transition = '';
+                _loadByAngle();
+            }, 400);
         }
 
         function applyInertia() {
