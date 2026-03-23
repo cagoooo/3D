@@ -231,9 +231,9 @@ https://你的帳號.github.io/3d-gallery/
 ---
 
 
-## ✅ 已完成進度總表（v9.2 截止）
+## ✅ 已完成進度總表（v9.3 截止）
 
-> 最後更新：2026-03-23（v9.2 手機端效能全面優化）
+> 最後更新：2026-03-23（v9.3 50+ 張光照迴圈效能優化）
 
 ---
 
@@ -329,6 +329,13 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **will-change 提示**：`.carousel` 與 `.carousel-item` 加入 `will-change: transform, filter`，瀏覽器提前分配 GPU 層減少重排。
 - [x] **主題色快取**：粒子動畫不再每幀查詢 `data-theme` 屬性，改用快取變數，主題切換時才刷新。
 - [x] **Page Visibility API**：鎖屏、切換分頁時自動暫停所有 RAF 動畫，頁面恢復後重啟，消除背景空轉耗電。
+
+### ⚡ v9.3：50+ 張卡片光照迴圈效能優化（最新完成）
+- [x] **亮度差異閾值跳幀**：`applyTransform()` 光照迴圈新增 delta ≥ 0.025 才寫入 DOM。自動旋轉時每幀亮度變化僅 ~0.002，50 張 × 60fps 的 100 次 style 操作降至 ~5 次/幀（節省 95%）。
+- [x] **背向卡片靜態暗色**：`bright ≤ 0.36` 的背面卡片固定 `brightness(0.3)`，以 `_isDark` 旗標防重複寫入，完全跳過動態陰影計算。
+- [x] **`_baseAngle` 數字快取**：建卡時同步儲存角度數值到元素屬性，省去光照迴圈每幀 `parseFloat(dataset)` 的轉型開銷。
+- [x] **`card-focused` 精準更新**：以 `_prevFrontCardEl` 快取最亮卡片，每幀只操作「換入/換出」2 次 classList，取代全卡 `forEach × 50` 次 toggle。
+- [x] **分批建構加速**：`CHUNK_SIZE` 桌機 8→20、手機 8→12，50 張相簿的 idle callback 批次從 6 次縮減至 2~3 次。
 
 ---
 
