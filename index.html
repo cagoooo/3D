@@ -51,7 +51,7 @@
             from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
         import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, listAll }
             from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
-        import { getFirestore, collection, doc, getDoc, setDoc, getDocs, deleteDoc, query, orderBy }
+        import { getFirestore, collection, doc, getDoc, setDoc, getDocs, deleteDoc, query, orderBy, limit, startAfter }
             from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
         // ★ Firebase 設定由 GitHub Actions inject.py 注入（佔位符，勿填真實值）
@@ -75,7 +75,7 @@
         window._fb = {
             auth, storage, db, storageRef, uploadBytes, getDownloadURL,
             deleteObject, listAll, collection, doc, getDoc, setDoc, getDocs, deleteDoc,
-            query, orderBy, GoogleAuthProvider, signInWithPopup, signOut,
+            query, orderBy, limit, startAfter, GoogleAuthProvider, signInWithPopup, signOut,
             onAuthStateChanged
         };
     </script>
@@ -2925,10 +2925,27 @@
 
                 _sharedAlbumLoading = true; // 鎖定，防止並發呼叫
 
-                // 讀取 profile（確認 isPublic & 取得顯示名稱）
-                fb.getDoc(fb.doc(fb.db, `users/${viewUid}/profile/info`))
-                    .then(doc => {
-                        const data = doc.exists() ? doc.data() : {};
+                // ── 輔助：將 Firestore doc 轉換為畫廊資料格式 ──
+                const _docToImg = d => ({
+                    src: d.data().url,
+                    title: d.data().title,
+                    date: d.data().date,
+                    tag: d.data().tag,
+                    camera: d.data().camera || '',
+                });
+
+                // ★ 優化①：profile 與「前 12 張」同步並行請求，省去一次循序 RTT
+                const FIRST_PAGE = 12;
+                const profilePromise = fb.getDoc(fb.doc(fb.db, `users/${viewUid}/profile/info`));
+                const firstPagePromise = fb.getDocs(fb.query(
+                    fb.collection(fb.db, `users/${viewUid}/images`),
+                    fb.orderBy('order'),
+                    fb.limit(FIRST_PAGE)
+                ));
+
+                Promise.all([profilePromise, firstPagePromise])
+                    .then(([profileDoc, firstSnap]) => {
+                        const data = profileDoc.exists() ? profileDoc.data() : {};
                         shareOwnerName.textContent = (data.displayName || '使用者') + ' 的相簿';
 
                         // ── 套用分享者的版型設定（全欄位）─────────────────────
@@ -2938,10 +2955,9 @@
                             if (lv.h) { layoutCfg.h = lv.h; document.documentElement.style.setProperty('--card-h', lv.h + 'px'); }
                             if (lv.persp) { layoutCfg.persp = lv.persp; perspective = lv.persp; scene.style.perspective = lv.persp + 'px'; }
                             if (lv.speed !== undefined) {
-                                autoRotateBase = lv.speed;    // ★ 必須同時更新基準速度，否則 tick 迴圈每幀把速度拉回預設 0.25
+                                autoRotateBase = lv.speed;
                                 autoRotateSpeed = lv.speed;
                             }
-                            // ✅ 補完其餘設定
                             if (lv.dragSens !== undefined) layoutCfg.dragSens = lv.dragSens;
                             if (lv.touchSens !== undefined) layoutCfg.touchSens = lv.touchSens;
                             if (lv.keySens !== undefined) layoutCfg.keySens = lv.keySens;
@@ -2950,7 +2966,6 @@
                                 document.documentElement.style.setProperty('--light-angle', lv.lightAngle + 'deg');
                             }
                         }
-                        // ────────────────────────────────────────────────────────────
 
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
@@ -2958,37 +2973,42 @@
                             return;
                         }
 
-                        // 已公開：載入圖片
-                        return fb.getDocs(fb.query(
-                            fb.collection(fb.db, `users/${viewUid}/images`),
-                            fb.orderBy('order')
-                        ));
-                    })
-                    .then(snap => {
-                        if (!snap) return; // isPublic = false 已提前 return
-                        allImageData = snap.docs.map(d => ({
-                            src: d.data().url,
-                            title: d.data().title,
-                            date: d.data().date,
-                            tag: d.data().tag,
-                            camera: d.data().camera || '',
-                        }));
+                        // ★ 優化②：前 12 張立即顯示，讓使用者馬上看到畫廊
+                        allImageData = firstSnap.docs.map(_docToImg);
                         filteredData = activeTag === '全部' ? [...allImageData]
                             : allImageData.filter(d => d.tag === activeTag);
                         buildTagBar(); buildGallery();
-                        // 畫庫建構完成後才真正啟動旋轉（圖片尚未載入時會由 startAutoRotate 內部等待）
                         if (isAutoRotating) startAutoRotate();
+
+                        // ★ 優化③：若第一頁剛好滿 12 張，背景靜默載入剩餘照片
+                        if (firstSnap.docs.length < FIRST_PAGE) return; // 不足 12 張，已全部載入
+                        const lastDoc = firstSnap.docs[firstSnap.docs.length - 1];
+                        return fb.getDocs(fb.query(
+                            fb.collection(fb.db, `users/${viewUid}/images`),
+                            fb.orderBy('order'),
+                            fb.startAfter(lastDoc)
+                        ));
+                    })
+                    .then(restSnap => {
+                        if (!restSnap || restSnap.empty) return; // 無剩餘照片
+                        // 補入剩餘資料後重建畫廊（保留當前旋轉角度）
+                        const restData = restSnap.docs.map(_docToImg);
+                        allImageData = [...allImageData, ...restData];
+                        filteredData = activeTag === '全部' ? [...allImageData]
+                            : allImageData.filter(d => d.tag === activeTag);
+                        buildTagBar();
+                        buildGallery(); // 重建 DOM（currentRotationY 保留，旋轉不中斷）
+                        // 不重啟 startAutoRotate：RAF tick 已在運行，重建後繼續使用新 galleryCards
                     })
                     .catch(err => {
                         console.warn('載入公開相簿失敗', err);
                         shareOwnerName.textContent = '公開相簿';
                         showBanner('⚠️ 無法載入公開相簿', true);
-                        // 失敗後解鎖，允許使用者手動重試（但不自動重試）
                         _sharedAlbumLoading = false;
                     });
             };
-            // 等待 DOM 與 Firebase 模組穩定後再讀取（手機端略長）
-            setTimeout(tryLoadSharedAlbum, 600);
+            // ★ 優化④：縮短初始等待 600ms → 50ms（retry 機制已能應對 _fb 未就緒的情況）
+            setTimeout(tryLoadSharedAlbum, 50);
         })();
 
         // 分享按鈕：產生公開連結並複製到剪貼簿
@@ -3321,6 +3341,8 @@
         function buildGallery() {
             // 重建前 disconnect 舊 Observer，防記憶體漏涌
             if (_lazyImgObserver) _lazyImgObserver.disconnect();
+            // 重置 card-focused 快取，舊 DOM 元素已失效
+            _prevFrontCardEl = null;
 
             carousel.innerHTML = '';
             numImages = filteredData.length;
