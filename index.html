@@ -3010,25 +3010,30 @@
                         }
 
                         // ── 唯讀模式安全上限 ──────────────────────────────────────
-                        // 觀看者無法開啟設定面板調整靈敏度，
-                        // 若分享者把靈敏度調很高，手機觀看者會完全無法控制旋轉。
-                        // 手機：觸控靈敏度上限 0.8，自動旋轉速度上限 0.4°/幀
-                        // 桌機：觸控靈敏度上限 1.2（桌機精準度夠，給稍大的彈性）
+                        // 強制使用觀看者友善的預設值，完全覆蓋分享者設定：
+                        //   • 手機：觸控靈敏度固定 0.5（??1.0 fallback 也被覆蓋）
+                        //   • 手機：自動旋轉速度固定 0.25°/幀
+                        //   • 桌機：觸控靈敏度上限 1.0
                         if (_isMobileDevice) {
-                            if (layoutCfg.touchSens > 0.8) layoutCfg.touchSens = 0.8;
-                            if (autoRotateBase > 0.4) { autoRotateBase = 0.4; autoRotateSpeed = 0.4; }
+                            layoutCfg.touchSens = Math.min(layoutCfg.touchSens ?? 1.0, 0.5);
+                            autoRotateBase  = Math.min(autoRotateBase,  0.25);
+                            autoRotateSpeed = Math.min(Math.abs(autoRotateSpeed), 0.25) * (autoRotateSpeed >= 0 ? 1 : -1);
                         } else {
-                            if (layoutCfg.touchSens > 1.2) layoutCfg.touchSens = 1.2;
+                            layoutCfg.touchSens = Math.min(layoutCfg.touchSens ?? 1.0, 1.0);
                         }
                         // ────────────────────────────────────────────────────────────
 
-                        // 分享相簿強制最遠視角：覆蓋分享者的 persp 設定，
-                        // 讓觀看者進入時看到全景木馬，不被單張大圖嚇到。
-                        // 觀看者仍可透過 Pinch / 滾輪自行縮近。
-                        const _READONLY_INIT_PERSP = 3000;
-                        perspective = _READONLY_INIT_PERSP;
-                        scene.style.perspective = _READONLY_INIT_PERSP + 'px';
-                        layoutCfg.persp = _READONLY_INIT_PERSP;
+                        // 分享相簿強制初始視角：覆蓋分享者的版型設定，
+                        // 讓觀看者進入時看到全景木馬，不被沉浸大圖嚇到。
+                        // 觀看者仍可透過 Pinch / 滾輪自行調整。
+                        const _READONLY_W = 260, _READONLY_H = 380, _READONLY_PERSP = 3000;
+                        layoutCfg.w = _READONLY_W;
+                        layoutCfg.h = _READONLY_H;
+                        layoutCfg.persp = _READONLY_PERSP;
+                        document.documentElement.style.setProperty('--card-w', _READONLY_W + 'px');
+                        document.documentElement.style.setProperty('--card-h', _READONLY_H + 'px');
+                        perspective = _READONLY_PERSP;
+                        scene.style.perspective = _READONLY_PERSP + 'px';
 
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
