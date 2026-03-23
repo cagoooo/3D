@@ -2650,6 +2650,7 @@
         let animationFrameId;
         let perspective = 1200;
         let isAutoRotating = true;
+        let _cachedParticleRGB = null; // 粒子主題色快取（提前宣告，避免 applyTheme TDZ 錯誤）
         let autoRotateRafId = null;        // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;        // 現在旋轉速度（動態，正就=右，負就=左）
         let autoRotateBase = 0.25;         // 使用者設定的基準速度（滑桿 + 分享設定同步）
@@ -4509,8 +4510,7 @@
             cosmos: '99,102,241', sunset: '249,115,22',
             forest: '34,197,94', rose: '236,72,153', gold: '234,179,8'
         };
-        // 快取主題色，避免每幀做 DOM getAttribute 查詢
-        let _cachedParticleRGB = null;
+        // 快取主題色，避免每幀做 DOM getAttribute 查詢（變數已在頂部宣告）
         function getParticleRGB() {
             if (!_cachedParticleRGB) {
                 _cachedParticleRGB = THEME_RGB[document.body.getAttribute('data-theme')] || '99,102,241';
