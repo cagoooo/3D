@@ -2968,6 +2968,19 @@
                             }
                         }
 
+                        // ── 唯讀模式安全上限 ──────────────────────────────────────
+                        // 觀看者無法開啟設定面板調整靈敏度，
+                        // 若分享者把靈敏度調很高，手機觀看者會完全無法控制旋轉。
+                        // 手機：觸控靈敏度上限 0.8，自動旋轉速度上限 0.4°/幀
+                        // 桌機：觸控靈敏度上限 1.2（桌機精準度夠，給稍大的彈性）
+                        if (_isMobileDevice) {
+                            if (layoutCfg.touchSens > 0.8) layoutCfg.touchSens = 0.8;
+                            if (autoRotateBase > 0.4) { autoRotateBase = 0.4; autoRotateSpeed = 0.4; }
+                        } else {
+                            if (layoutCfg.touchSens > 1.2) layoutCfg.touchSens = 1.2;
+                        }
+                        // ────────────────────────────────────────────────────────────
+
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
                             carousel.innerHTML = '<p style="color:rgba(255,255,255,.45);font-size:.9rem;text-align:center;margin-top:160px;">🔒 此相簿尚未公開</p>';
@@ -3855,10 +3868,14 @@
         }
 
         function applyInertia() {
-            if (Math.abs(velocityX) > 0.06 || Math.abs(velocityY) > 0.06) {
+            // 手機：衰減加快（0.87 vs 0.93）、停止門檻提高（0.15 vs 0.06）
+            // 效果：手機輕彈後 ~0.4s 停止（而非 ~1s），旋轉更可控
+            const _decay     = _isMobileDevice ? 0.87 : 0.93;
+            const _stopThres = _isMobileDevice ? 0.15 : 0.06;
+            if (Math.abs(velocityX) > _stopThres || Math.abs(velocityY) > _stopThres) {
                 currentRotationY += velocityX; currentRotationX += velocityY;
                 applyTransform();
-                velocityX *= 0.93; velocityY *= 0.93;
+                velocityX *= _decay; velocityY *= _decay;
                 animationFrameId = requestAnimationFrame(applyInertia);
             } else {
                 // 慕性完全衰滅：Snap 到最近卡片後，再决定是否重啟自動旋轉
@@ -3903,6 +3920,11 @@
                 : (layoutCfg.dragSens ?? 1.0);
             velocityX = (cx - prevX) * 0.4 * sens;
             velocityY = (cy - prevY) * 0.2 * sens;
+            // 手機：每幀速度上限 5°，防止快速輕彈後轉速飛天無法控制
+            if (_isMobileDevice && isTouch) {
+                velocityX = Math.max(-5, Math.min(5, velocityX));
+                velocityY = Math.max(-3, Math.min(3, velocityY));
+            }
             currentRotationY += velocityX; currentRotationX += velocityY;
             applyTransform(); prevX = cx; prevY = cy;
         }
