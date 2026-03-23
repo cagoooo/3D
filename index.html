@@ -2651,6 +2651,7 @@
         let perspective = 1200;
         let isAutoRotating = true;
         let _cachedParticleRGB = null; // 粒子主題色快取（提前宣告，避免 applyTheme TDZ 錯誤）
+        const _isMobileDevice = window.innerWidth <= 768; // 提前宣告，多處使用（TDZ 防護）
         let autoRotateRafId = null;        // 自動旋轉專用 RAF ID
         let autoRotateSpeed = 0.25;        // 現在旋轉速度（動態，正就=右，負就=左）
         let autoRotateBase = 0.25;         // 使用者設定的基準速度（滑桿 + 分享設定同步）
@@ -4577,8 +4578,7 @@
         // ================================================================
         const particleCanvas = document.getElementById('particle-canvas');
         const pCtx = particleCanvas.getContext('2d');
-        // 手機裝置減少粒子數，降低 CPU/GPU 負擔
-        const _isMobileDevice = window.innerWidth <= 768;
+        // 手機裝置減少粒子數，降低 CPU/GPU 負擔（_isMobileDevice 已在頂部宣告）
         const PARTICLE_COUNT = _isMobileDevice ? 30 : 80;
         // 手機限制粒子動畫至 30fps，桌機維持 60fps
         const _PARTICLE_FRAME_MS = _isMobileDevice ? 33 : 0;
