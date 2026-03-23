@@ -3344,7 +3344,8 @@
 
             // 分批參數：前 N 張同步建構（首屏可見），其餘分批補建
             const FIRST_BATCH = Math.min(numImages, 12);
-            const CHUNK_SIZE = 8;
+            // 手機用 12（避免單批太大阻塞主執行緒），桌機用 20（減少 idle callback 次數，50 張只需 3 批）
+            const CHUNK_SIZE = _isMobileDevice ? 12 : 20;
 
             // 建立單張卡片 DOM 的工廠函數
             function buildCard(i, useLazy) {
@@ -3504,6 +3505,7 @@
                 const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
                 item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
                 item.dataset.baseAngle = thetaInRow * colInRow;
+                item._baseAngle = thetaInRow * colInRow; // 數字快取，光照迴圈直接讀取，省去每幀 parseFloat
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3732,6 +3734,9 @@
 
         // 手機版光照計算跳幀計數器（每 2 幀才重算一次，60fps→30fps 光照更新，視覺上幾乎無感）
         let _lightingFrameCounter = 0;
+        // card-focused 快取：避免每幀對全部卡片做 classList.toggle
+        let _prevFrontCardEl = null;
+
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
             const pX = isDragging ? 0 : parallaxX;
@@ -3748,20 +3753,46 @@
             const lightOff = layoutCfg.lightAngle || 0;
             let frontCardEl = null; let frontBright = -1;
             galleryCards.forEach(card => {
-                const base = parseFloat(card.dataset.baseAngle || 0);
+                // ★ 優化①：直接讀數字屬性，省去每幀 parseFloat(dataset)
+                const base = card._baseAngle !== undefined ? card._baseAngle : parseFloat(card.dataset.baseAngle || 0);
                 const eff = (((base + currentRotationY + lightOff) % 360) + 360) % 360;
                 const rad = eff * Math.PI / 180;
                 const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+
+                // AY: 最亮卡片追蹤（不受跳幀影響，必須每幀都算）
+                if (bright > frontBright) { frontBright = bright; frontCardEl = card; }
+
+                // ★ 優化②：亮度差異 < 0.025 時跳過 DOM 寫入
+                // 自動旋轉 0.25°/幀 → 單卡亮度每幀變化約 0.002，絕大多數幀直接跳過
+                const prevBright = card._bright;
+                if (prevBright !== undefined && Math.abs(bright - prevBright) < 0.025) return;
+                card._bright = bright;
+
+                // ★ 優化③：背向卡片（bright ≤ 0.36）固定暗色，跳過動態陰影計算
+                // 背面始終無陰影，用旗標避免重複寫入相同值
+                if (bright <= 0.36) {
+                    if (!card._isDark) {
+                        card._isDark = true;
+                        card.style.filter = 'brightness(0.3)';
+                        card.style.boxShadow = 'none';
+                    }
+                    return;
+                }
+                card._isDark = false;
+
                 // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
                 const shadowBlur = Math.round(bright * 28);
                 const shadowAlpha = (bright * 0.55).toFixed(2);
                 card.style.filter = `brightness(${bright.toFixed(2)})`;
                 card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
-                // AY: 找到最亮(最前方)的卡片
-                if (bright > frontBright) { frontBright = bright; frontCardEl = card; }
             });
-            // AY: 正面高亮 — 只有最前方卡片加 card-focused 類別
-            galleryCards.forEach(card => card.classList.toggle('card-focused', card === frontCardEl));
+
+            // ★ 優化④：card-focused 用快取，只操作「變動的那張」，省去 50 次 classList.toggle
+            if (frontCardEl !== _prevFrontCardEl) {
+                if (_prevFrontCardEl) _prevFrontCardEl.classList.remove('card-focused');
+                if (frontCardEl) frontCardEl.classList.add('card-focused');
+                _prevFrontCardEl = frontCardEl;
+            }
         }
         // AY: 慣性停止後自動 Snap 吸附最近卡片
         function snapToNearest() {
