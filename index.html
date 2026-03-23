@@ -286,6 +286,7 @@
             transform-style: preserve-3d;
             transition: transform 0.1s ease-out;
             cursor: grab;
+            will-change: transform;
         }
 
         .carousel:active {
@@ -304,6 +305,7 @@
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.1) inset;
             user-select: none;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            will-change: transform, filter;
         }
 
         .carousel-item .img-wrap {
@@ -354,6 +356,14 @@
         @supports (-webkit-box-reflect: below) {
             .carousel-item .img-wrap {
                 -webkit-box-reflect: below 15px linear-gradient(transparent, transparent, rgba(0, 0, 0, 0.3));
+            }
+        }
+        /* 手機關閉倒影：每張卡片倒影需建立獨立 GPU 合成層，在低端手機上造成嚴重卡頓 */
+        @media (max-width: 768px) {
+            @supports (-webkit-box-reflect: below) {
+                .carousel-item .img-wrap {
+                    -webkit-box-reflect: none;
+                }
             }
         }
 
@@ -1252,6 +1262,18 @@
             .carousel {
                 width: 200px;
                 height: 300px;
+            }
+
+            /* 手機移除高耗能 backdrop-filter：在 GPU 效能較弱的手機上代價極高 */
+            .control-panel,
+            .lightbox-overlay,
+            .share-bar,
+            .tag-filter-bar,
+            .sync-overlay,
+            .bulk-bar,
+            .layout-drawer {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
             }
 
             /* ── 手機版：可折疊底部抽屜 ── */
@@ -3037,6 +3059,7 @@
             // 功能W：主題切換加入過渡法
             document.body.classList.add('theme-switching');
             document.body.setAttribute('data-theme', themeName);
+            _cachedParticleRGB = null; // 清除粒子色快取，讓下一幀重新讀取新主題色
             document.querySelectorAll('.theme-dot').forEach(d => {
                 d.classList.toggle('active', d.dataset.theme === themeName);
             });
@@ -3706,6 +3729,8 @@
         // ===== 功能A：視差偏移變數 =====
         let parallaxX = 0, parallaxY = 0;
 
+        // 手機版光照計算跳幀計數器（每 2 幀才重算一次，60fps→30fps 光照更新，視覺上幾乎無感）
+        let _lightingFrameCounter = 0;
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
             const pX = isDragging ? 0 : parallaxX;
@@ -3713,6 +3738,11 @@
             carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
 
             // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
+            // 手機版跳幀：光照計算每 2 幀才跑一次，大幅降低每秒 DOM 操作次數
+            if (_isMobileDevice) {
+                _lightingFrameCounter = (_lightingFrameCounter + 1) % 2;
+                if (_lightingFrameCounter !== 0) return;
+            }
             // AZ: lightAngle 光源角度偏移（0=正前方光，90=右側光）
             const lightOff = layoutCfg.lightAngle || 0;
             let frontCardEl = null; let frontBright = -1;
@@ -4039,6 +4069,26 @@
             cancelAnimationFrame(animationFrameId);
             velocityX = 0; velocityY = 0;
         }
+
+        // ── Page Visibility API：頁面隱藏時暫停所有動畫，恢復時重啟 ──
+        // 使用場景：手機鎖屏、切換分頁、下拉通知欄等，避免背景空耗電
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // 暫停自動旋轉與慣性動畫
+                if (autoRotateRafId) { cancelAnimationFrame(autoRotateRafId); autoRotateRafId = null; }
+                cancelAnimationFrame(animationFrameId);
+                // 粒子動畫在 animateParticles 內偵測 document.hidden 自行停止
+            } else {
+                // 頁面恢復可見：重啟粒子動畫
+                if (!_particleRafId) {
+                    _particleRafId = requestAnimationFrame(animateParticles);
+                }
+                // 重啟自動旋轉（若使用者未手動暫停）
+                if (isAutoRotating && !autoRotateRafId) {
+                    startAutoRotate();
+                }
+            }
+        });
 
         autoRotateBtn.addEventListener('click', () => {
             isAutoRotating = !isAutoRotating;
@@ -4447,15 +4497,25 @@
         // ================================================================
         const particleCanvas = document.getElementById('particle-canvas');
         const pCtx = particleCanvas.getContext('2d');
-        const PARTICLE_COUNT = 80;
+        // 手機裝置減少粒子數，降低 CPU/GPU 負擔
+        const _isMobileDevice = window.innerWidth <= 768;
+        const PARTICLE_COUNT = _isMobileDevice ? 30 : 80;
+        // 手機限制粒子動畫至 30fps，桌機維持 60fps
+        const _PARTICLE_FRAME_MS = _isMobileDevice ? 33 : 0;
+        let _lastParticleFrameTs = 0;
         let particles = [];
 
         const THEME_RGB = {
             cosmos: '99,102,241', sunset: '249,115,22',
             forest: '34,197,94', rose: '236,72,153', gold: '234,179,8'
         };
+        // 快取主題色，避免每幀做 DOM getAttribute 查詢
+        let _cachedParticleRGB = null;
         function getParticleRGB() {
-            return THEME_RGB[document.body.getAttribute('data-theme')] || '99,102,241';
+            if (!_cachedParticleRGB) {
+                _cachedParticleRGB = THEME_RGB[document.body.getAttribute('data-theme')] || '99,102,241';
+            }
+            return _cachedParticleRGB;
         }
         function initParticles() {
             particleCanvas.width = window.innerWidth;
@@ -4470,7 +4530,16 @@
                 phase: Math.random() * Math.PI * 2,
             }));
         }
+        let _particleRafId = null;
         function animateParticles(ts) {
+            // 頁面隱藏時停止動畫（省電，避免背景空轉）
+            if (document.hidden) { _particleRafId = null; return; }
+            // 手機限速 30fps
+            if (_PARTICLE_FRAME_MS > 0 && ts - _lastParticleFrameTs < _PARTICLE_FRAME_MS) {
+                _particleRafId = requestAnimationFrame(animateParticles);
+                return;
+            }
+            _lastParticleFrameTs = ts;
             pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
             const rgb = getParticleRGB();
             const t = ts * 0.001;
@@ -4486,10 +4555,10 @@
                 if (p.y < -5) p.y = particleCanvas.height + 5;
                 if (p.y > particleCanvas.height + 5) p.y = -5;
             });
-            requestAnimationFrame(animateParticles);
+            _particleRafId = requestAnimationFrame(animateParticles);
         }
         initParticles();
-        requestAnimationFrame(animateParticles);
+        _particleRafId = requestAnimationFrame(animateParticles);
 
         // ================================================================
         //  功能C：縮圖帶
