@@ -1264,6 +1264,11 @@
                 height: 300px;
             }
 
+            /* 手機卡片翻轉改瞬切：0.65s CSS transition 在手機觸發 paint，體感卡 */
+            .carousel-item-inner {
+                transition: none !important;
+            }
+
             /* 手機移除高耗能 backdrop-filter：在 GPU 效能較弱的手機上代價極高 */
             .control-panel,
             .lightbox-overlay,
@@ -3017,6 +3022,14 @@
                         }
                         // ────────────────────────────────────────────────────────────
 
+                        // 分享相簿強制最遠視角：覆蓋分享者的 persp 設定，
+                        // 讓觀看者進入時看到全景木馬，不被單張大圖嚇到。
+                        // 觀看者仍可透過 Pinch / 滾輪自行縮近。
+                        const _READONLY_INIT_PERSP = 3000;
+                        perspective = _READONLY_INIT_PERSP;
+                        scene.style.perspective = _READONLY_INIT_PERSP + 'px';
+                        layoutCfg.persp = _READONLY_INIT_PERSP;
+
                         // 若未公開，顯示提示並結束
                         if (!data.isPublic) {
                             carousel.innerHTML = '<p style="color:rgba(255,255,255,.45);font-size:.9rem;text-align:center;margin-top:160px;">🔒 此相簿尚未公開</p>';
@@ -3881,17 +3894,20 @@
                     if (!card._isDark) {
                         card._isDark = true;
                         card.style.filter = 'brightness(0.3)';
-                        card.style.boxShadow = 'none';
+                        if (!_isMobileDevice) card.style.boxShadow = 'none';
                     }
                     return;
                 }
                 card._isDark = false;
 
                 // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
+                // 手機跳過 box-shadow：動態 boxShadow 每幀觸發 GPU repaint，手機代價高
                 const shadowBlur = Math.round(bright * 28);
                 const shadowAlpha = (bright * 0.55).toFixed(2);
                 card.style.filter = `brightness(${bright.toFixed(2)})`;
-                card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+                if (!_isMobileDevice) {
+                    card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+                }
             });
 
             // ★ 優化④：card-focused 用快取，只操作「變動的那張」，省去 50 次 classList.toggle
@@ -4649,11 +4665,14 @@
         //  功能B：粒子背景特效
         // ================================================================
         const particleCanvas = document.getElementById('particle-canvas');
-        const pCtx = particleCanvas.getContext('2d');
-        // 手機裝置減少粒子數，降低 CPU/GPU 負擔（_isMobileDevice 已在頂部宣告）
-        const PARTICLE_COUNT = _isMobileDevice ? 30 : 80;
-        // 手機限制粒子動畫至 30fps，桌機維持 60fps
-        const _PARTICLE_FRAME_MS = _isMobileDevice ? 33 : 0;
+        // 手機完全關閉粒子：Canvas 本身是一個 GPU Composite Layer，
+        // 即使 30fps/30顆也佔用 VRAM 與合成開銷；手機直接隱藏不初始化。
+        if (_isMobileDevice) {
+            particleCanvas.style.display = 'none';
+        }
+        const pCtx = _isMobileDevice ? null : particleCanvas.getContext('2d');
+        const PARTICLE_COUNT = _isMobileDevice ? 0 : 80;
+        const _PARTICLE_FRAME_MS = 0; // 桌機維持 60fps（手機不跑，此值無用）
         let _lastParticleFrameTs = 0;
         let particles = [];
 
@@ -4669,6 +4688,7 @@
             return _cachedParticleRGB;
         }
         function initParticles() {
+            if (_isMobileDevice) return; // 手機不啟動粒子
             particleCanvas.width = window.innerWidth;
             particleCanvas.height = window.innerHeight;
             particles = Array.from({ length: PARTICLE_COUNT }, () => ({
@@ -4683,9 +4703,9 @@
         }
         let _particleRafId = null;
         function animateParticles(ts) {
+            if (_isMobileDevice) { _particleRafId = null; return; } // 手機不跑
             // 頁面隱藏時停止動畫（省電，避免背景空轉）
             if (document.hidden) { _particleRafId = null; return; }
-            // 手機限速 30fps
             if (_PARTICLE_FRAME_MS > 0 && ts - _lastParticleFrameTs < _PARTICLE_FRAME_MS) {
                 _particleRafId = requestAnimationFrame(animateParticles);
                 return;
