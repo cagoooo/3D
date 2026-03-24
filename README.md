@@ -330,10 +330,26 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **主題色快取**：粒子動畫不再每幀查詢 `data-theme` 屬性，改用快取變數，主題切換時才刷新。
 - [x] **Page Visibility API**：鎖屏、切換分頁時自動暫停所有 RAF 動畫，頁面恢復後重啟，消除背景空轉耗電。
 
-### 📱 v9.8：手機效能全面優化 + 分享相簿遠景進入（最新完成）
+### 🔧 v9.9：分享相簿觀看體驗全面修正（最新完成）
+
+> 最後更新：2026-03-24
+
+**超大圖問題根本修正：**
+- [x] **前排卡片視覺縮放公式解析**：環形半徑由張數決定（`rInRow = (w+GAP) / (2·sin(π/N))`），30 張相簿時半徑達 1359px；perspective=3000 時前排卡片縮放倍率 1.83x → 看起來 475px 寬，手機全螢幕爆框。
+- [x] **perspective 改為 8000px（滾輪上限）**：前排卡片縮放降至 1.20x（313px）；且觀看者進入後已在最遠狀態，滾輪無法再拉遠。
+- [x] **同步重置卡片尺寸至標準 260×380**：原本只改 perspective，卡片 w/h 仍繼承分享者設定（沉浸 420×600）；現在強制覆蓋 `--card-w` / `--card-h`，兩者缺一不可。
+
+**滑動超快問題根本修正：**
+- [x] **`touchSens` cap 邏輯錯誤修正**：舊版用 `if (touchSens > 0.8)` 判斷，分享者若從未設定 touchSens，值為 `undefined`，`undefined > 0.8 = false`，cap 完全不觸發；改為 `Math.min(touchSens ?? 1.0, 0.5)`，無論有無設定都強制套用。
+- [x] **手機觸控靈敏度上限降至 0.5**：原上限 0.8 與 default 1.0 差 20% 幾乎感覺不出來；改為 0.5 使拖曳速度降至一半，旋轉明顯更可控。
+- [x] **autoRotateBase / Speed 上限降至 0.25°/幀**：防止分享者設定高速自動旋轉影響觀看者。
+
+---
+
+### 📱 v9.8：手機效能全面優化 + 分享相簿遠景進入
 
 **分享相簿：**
-- [x] **進入強制最遠視角**：readonly 模式固定 perspective=3000px（全景木馬），觀看者不被分享者的沉浸近景設定嚇到，仍可自行 Pinch 縮近。
+- [x] **進入強制遠視角（初版）**：readonly 模式覆蓋分享者 persp 設定，初始 perspective=3000px；後於 v9.9 修正為 8000px。
 
 **手機效能：**
 - [x] **完全關閉粒子動畫**：手機隱藏 Canvas、不啟動 RAF，消除粒子 GPU Composite Layer 與 CPU 計算開銷（原 30fps/30顆 → 0）。
@@ -375,6 +391,138 @@ https://你的帳號.github.io/3d-gallery/
 ## 🗺️ 未來開發路線圖
 
 > 以「近期 → 中期 → 長期」分層排列，每項均附**實作難度**、**效益分析**與**程式碼示例**，可直接作為開發規格參考。
+
+---
+
+## 🆕 v9.x 立即可做（從本次修正延伸的小幅優化）
+
+---
+
+### AG1. 分享相簿進入動畫：從最遠自動推進到舒適距離
+
+> **難度**：⭐｜**效益**：讓「最遠進入」不顯突兀，有電影鏡頭拉近感
+
+目前 readonly 固定在 8000px（最遠）並保持不動。加入進入時自動從 8000 緩降到 3500px 的動畫，讓觀看者感受到「鏡頭推近」的歡迎感：
+
+```js
+// 在 buildGallery() 後執行
+function _readonlyZoomInAnimation() {
+    const START = 8000, END = 3500, DURATION = 1800; // ms
+    const t0 = performance.now();
+    function tick(now) {
+        const p = Math.min(1, (now - t0) / DURATION);
+        // easeOutCubic
+        const ease = 1 - Math.pow(1 - p, 3);
+        perspective = START + (END - START) * ease;
+        scene.style.perspective = perspective + 'px';
+        if (p < 1) requestAnimationFrame(tick);
+        else { perspective = END; layoutCfg.persp = END; }
+    }
+    requestAnimationFrame(tick);
+}
+```
+
+**注意**：`buildGallery()` 仍用 8000px 計算環形半徑，保持一致；動畫只改 CSS perspective 不重建 DOM。
+
+---
+
+### AG2. 分享相簿手機端「輕觸暫停 / 再輕觸繼續」旋轉
+
+> **難度**：⭐｜**效益**：手機觀看者常常只想看一張圖，輕觸暫停比滑動更直覺
+
+目前觸碰就開始拖曳（`handleDragStart`），沒有簡單的「點一下暫停/繼續」：
+
+```js
+// handleDragEnd：dist < 5px 判定為點擊
+// readonly 模式下點擊背景 → 切換自動旋轉（與桌機一致）
+if (_isReadonlyMode && dist < 5 && !isCard) {
+    isAutoRotating = !isAutoRotating;
+    isAutoRotating ? startAutoRotate() : stopAutoRotate();
+}
+```
+
+---
+
+### AG3. Lightbox 在分享相簿支援左右滑動切換照片（Touch Swipe）
+
+> **難度**：⭐⭐｜**效益**：手機看大圖時直覺地左右滑動換張，目前只能點箭頭按鈕
+
+```js
+// 在 Lightbox open 時加入 touch 監聽
+let lbTouchStartX = 0;
+lightbox.addEventListener('touchstart', e => {
+    lbTouchStartX = e.touches[0].clientX;
+}, { passive: true });
+lightbox.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - lbTouchStartX;
+    if (Math.abs(dx) > 50) {  // 50px 觸發門檻
+        dx < 0 ? lbShowIndex(lbCurrentIndex + 1)
+               : lbShowIndex(lbCurrentIndex - 1);
+    }
+}, { passive: true });
+```
+
+---
+
+### AG4. 分享相簿「複製連結」按鈕（readonly 模式顯示）
+
+> **難度**：⭐｜**效益**：讓觀看分享相簿的人可以一鍵再分享給朋友
+
+```js
+// 唯讀模式頂部加入複製按鈕
+if (_isReadonlyMode) {
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = '🔗 分享此相簿';
+    copyBtn.className = 'btn btn-slate';
+    copyBtn.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(location.href);
+        showBanner('✅ 連結已複製！', false);
+    });
+    document.querySelector('.controls').prepend(copyBtn);
+}
+```
+
+---
+
+### AG5. 手機端「搖一搖換主題」彩蛋
+
+> **難度**：⭐⭐｜**效益**：趣味互動增加黏著度，社群媒體分享話題性
+
+```js
+let shakeLastT = 0, shakeLastAcc = { x: 0, y: 0, z: 0 };
+window.addEventListener('devicemotion', e => {
+    const { x, y, z } = e.accelerationIncludingGravity;
+    const delta = Math.abs(x - shakeLastAcc.x)
+                + Math.abs(y - shakeLastAcc.y)
+                + Math.abs(z - shakeLastAcc.z);
+    const now = Date.now();
+    if (delta > 25 && now - shakeLastT > 1500) {
+        shakeLastT = now;
+        // 切換到下一個主題
+        const themes = ['default','forest','ocean','sunset','monochrome'];
+        const next = (themes.indexOf(currentTheme) + 1) % themes.length;
+        applyTheme(themes[next]);
+        showBanner(`🎨 主題切換：${themes[next]}`, false);
+    }
+    shakeLastAcc = { x, y, z };
+});
+```
+
+---
+
+### AG6. 相簿旋轉軸傾斜（X 軸旋轉保存）
+
+> **難度**：⭐｜**效益**：版型設定抽屜多一個旋轉傾斜角度滑桿，視覺層次更豐富
+
+目前 `currentRotationX`（上下傾斜）每次重置不儲存。加入滑桿後可讓相簿「固定以某個角度展示」：
+
+```js
+// 版型抽屜新增 tiltX 滑桿（-30° ～ +30°）
+layoutCfg.tiltX = +lvTiltX.value;
+// applyTransform 中
+carousel.style.transform =
+    `rotateX(${layoutCfg.tiltX ?? currentRotationX}deg) rotateY(${currentRotationY}deg)`;
+```
 
 ---
 
