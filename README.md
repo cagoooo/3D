@@ -231,9 +231,9 @@ https://你的帳號.github.io/3d-gallery/
 ---
 
 
-## ✅ 已完成進度總表（v9.6 截止）
+## ✅ 已完成進度總表（v9.11 截止）
 
-> 最後更新：2026-03-23（v9.8 手機效能全面優化 + 分享相簿遠景進入）
+> 最後更新：2026-03-24（v9.11 拖曳方向修正 + AG1 動態透視動畫）
 
 ---
 
@@ -330,7 +330,35 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **主題色快取**：粒子動畫不再每幀查詢 `data-theme` 屬性，改用快取變數，主題切換時才刷新。
 - [x] **Page Visibility API**：鎖屏、切換分頁時自動暫停所有 RAF 動畫，頁面恢復後重啟，消除背景空轉耗電。
 
-### 🔧 v9.9：分享相簿觀看體驗全面修正（最新完成）
+### 🎯 v9.11：分享相簿互動體驗精修（最新完成）
+
+> 最後更新：2026-03-24
+
+**控制面板點擊穿透修正：**
+- [x] **`preserve-3d` hit-test 穿透問題根本修正**：CSS `transform-style: preserve-3d` 導致 3D 卡片在 z 軸方向延伸，命中測試穿透控制面板元素。改以 `z-index: 999` + `isolation: isolate`（建立新堆疊上下文）雙重阻斷，並在面板加入 `pointerdown` stopPropagation，以及在 `handleDragStart` 內加入 `.closest('.control-panel')` 守門判斷，三層保障徹底解決暫停按鈕被卡片攔截的問題。
+
+**拖曳方向邏輯修正：**
+- [x] **放手瞬間手抖問題修正**：舊版以放手瞬間的 `velocityX` 判斷旋轉方向，但手抖可能讓 velocityX 符號與實際拖曳方向相反（如向左拖後帶著微小右移放手 → 誤判為右旋）。改為：當累計位移 `totalDx = prevX - startX` > 20px 時，以 `Math.sign(totalDx)` 為主要方向依據，小幅移動才 fallback 到 velocityX，確保左拖必定左轉。
+
+**AG1 縮放入場動畫全面重做：**
+- [x] **動態 END 透視值計算**：依實際相簿張數（`perRowGlobal`）計算環形半徑 `R`，再用 `safe = ratio × R / (ratio - 1)` 公式確保前排卡片高度不超過視窗 75%，END 限制於 3200～8000px；43 張相簿自動算出 END≈5534px（scale≈1.54x），完全不爆框。
+- [x] **動畫時序修正（兩段式 Firebase 載入）**：Firebase 分兩批載入（前 12 張先到、剩餘後到），舊版在第一批後立即執行動畫，此時 perRowGlobal=12（R 偏小）；第二批重建 gallery 後 perRowGlobal=43，perspective 已固定反而更擠。改為：≤12 張時第一批完成後執行；>12 張時等第二批 `buildGallery()` 完成後才執行，保證動畫使用最終正確的 perRowGlobal。
+- [x] **流暢 cubic-ease-out 進場**：從 START=8000px 動畫推進至計算後的 END，持續 1800ms，以 `1-(1-p)³` 緩動，帶給觀看者「相簿從遠方徐徐貼近」的沉浸感。
+
+---
+
+### 🔧 v9.10：手機效能深度優化
+
+**五項手機端效能優化：**
+- [x] **靜態骨架屏**：`body.mobile-device` 下，圖片佔位骨架動畫（`background-position` 滑動）改為靜態，消除每張未載入圖片持續觸發的 CSS 動畫合成層開銷。
+- [x] **跳過閒置批次入場波浪動畫**：`requestIdleCallback` 延遲批次（`useLazy=true`）在手機端不加 `entering-wave` CSS 類別，避免每批 6 張同時觸發 `filter:blur(4px)` 動畫造成 GPU 爆炸。
+- [x] **CHUNK_SIZE 從 20 降至 6**：手機端每批 DOM 插入量從 20 張降至 6 張，主執行緒阻塞時間縮短 70%，讓第一批 6 張卡片更快顯示，其餘在閒置時間補齊。
+- [x] **唯讀模式跳過縮圖帶建構**：分享相簿不呼叫 `buildThumbStrip()`，省去 N 張縮圖 DOM 節點建立與圖片預載，節省記憶體約 30-50%。
+- [x] **唯讀模式跳過長按事件監聽**：分享相簿不掛載 `pointerdown/pointerup/pointercancel` 長按進入多選的邏輯，減少觸控事件處理路徑長度，改善觸控響應速度。
+
+---
+
+### 🔧 v9.9：分享相簿觀看體驗全面修正
 
 > 最後更新：2026-03-24
 
