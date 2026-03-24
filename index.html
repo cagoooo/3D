@@ -1131,7 +1131,8 @@
             bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 10;
+            z-index: 999; /* 高於 3D 場景 hit-test 層，防止卡片截走點擊 */
+            isolation: isolate; /* 獨立 stacking context */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -3993,6 +3994,8 @@
         // ================================================================
         function handleDragStart(e) {
             if (lbOpen) return;
+            // 控制面板內點擊不觸發拖曳（防止按鈕 click 被 3D 穿透截走後又誤啟動拖曳）
+            if (e.target && e.target.closest('.control-panel, #layout-drawer, #tag-bar, #bulk-bar')) return;
             // 🔧 LINE WebView 修復：多指觸控(Pinch)時直接忽略，防止 touches[0] 衝突
             if (e.touches && e.touches.length !== 1) return;
             isDragging = true;
@@ -4906,6 +4909,16 @@
         // ── 控制面板自動淡出（5秒後淡至半透明，hover 恢復）────────────────
         const _panel = document.querySelector('.control-panel');
         const _panelHandle = document.getElementById('panel-handle');
+
+        // ── 阻斷 3D 卡片點擊穿透 ─────────────────────────────────────────
+        // CSS z-index 對 preserve-3d 場景的 hit-test 有時不可靠（Chrome / Safari 3D 穿透）
+        // 在 control-panel 的 pointerdown 階段 stopPropagation，確保面板內的按鈕永遠優先響應，
+        // 不讓事件繼續冒泡到 handleDragStart 或被 carousel card 截走
+        if (_panel) {
+            _panel.addEventListener('pointerdown', e => {
+                e.stopPropagation(); // 阻止傳播到 document handleDragStart 及 carousel
+            });
+        }
 
         // 手機版折疊抽屜：點擊把手切換展開/折疊
         function isMobile() { return window.innerWidth <= 768; }
