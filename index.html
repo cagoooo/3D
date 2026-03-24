@@ -4065,8 +4065,14 @@
                 autoRotateBtn.classList.remove('btn-slate');
 
                 // 設定依據滑動方向的速度，給予最小初始速度
-                const gestureV = velocityX || (Math.sign(prevX - startX) * 0.5) || 1;
-                autoRotateSpeed = Math.sign(gestureV) * Math.max(autoRotateBase, Math.min(1.5, Math.abs(gestureV) * 0.32));
+                // ★ 方向修正：鬆手瞬間手部微震可能讓 velocityX 符號反向
+                //   → 整體位移 > 20px 時以總位移方向為準，瞬間 velocity 只決定速度大小
+                const totalDx = prevX - startX;
+                const gestureDir = Math.abs(totalDx) > 20
+                    ? Math.sign(totalDx)           // 用總位移方向（穩定）
+                    : Math.sign(velocityX || totalDx || 1); // 短距微移用瞬間速度
+                const gestureSpd = Math.abs(velocityX) || 0.5;
+                autoRotateSpeed = gestureDir * Math.max(autoRotateBase, Math.min(1.5, gestureSpd * 0.32));
                 window._restartAutoRotate = true; // 讓 applyInertia 結束後接手旋轉
             }
 
