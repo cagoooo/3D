@@ -3078,10 +3078,14 @@
                         applyCurrentSort(); // 功能AF
                         buildTagBar(); buildGallery();
                         if (isAutoRotating) startAutoRotate();
-                        _readonlyZoomInAnimation(); // AG1：鏡頭從最遠推近至 3500px
 
                         // ★ 優化③：若第一頁剛好滿 12 張，背景靜默載入剩餘照片
-                        if (firstSnap.docs.length < FIRST_PAGE) return; // 不足 12 張，已全部載入
+                        // AG1 動畫：相簿 ≤ 12 張（無第二批）時立即執行；超過則等全部載完再跑，
+                        // 確保 perRowGlobal 是最終值才計算正確的安全終點
+                        if (firstSnap.docs.length < FIRST_PAGE) {
+                            _readonlyZoomInAnimation(); // 張數確定，立即推近
+                            return; // 不足 12 張，已全部載入
+                        }
                         const lastDoc = firstSnap.docs[firstSnap.docs.length - 1];
                         return fb.getDocs(fb.query(
                             fb.collection(fb.db, `users/${viewUid}/images`),
@@ -3099,6 +3103,7 @@
                         applyCurrentSort(); // 功能AF
                         buildTagBar();
                         buildGallery(); // 重建 DOM（currentRotationY 保留，旋轉不中斷）
+                        _readonlyZoomInAnimation(); // AG1：全部照片到齊後才計算正確終點並推近
                         // 不重啟 startAutoRotate：RAF tick 已在運行，重建後繼續使用新 galleryCards
                     })
                     .catch(err => {
