@@ -2953,7 +2953,32 @@
                 perspective = Math.round(START + (END - START) * ease);
                 scene.style.perspective = perspective + 'px';
                 if (p < 1) { requestAnimationFrame(tick); }
-                else        { perspective = END; layoutCfg.persp = END; }
+                else {
+                    perspective = END; layoutCfg.persp = END;
+                    // ── 手機端動態速度上限（動畫完成後才算，此時 perRowGlobal / END 均已確定）──
+                    // 問題根源：相簿越大，環形半徑 R 越大，同樣角速度視覺上跑得越快。
+                    // 修正：依投影半徑 R_proj 反推「讓前排卡片視覺速度 ≤ 螢幕寬 60%/秒」所需角速度。
+                    // 同樣邏輯反推 touchSens：令 1px 手指 ≈ 3px 前排卡片視覺位移（舒適手感比例）。
+                    if (_isMobileDevice) {
+                        const _Rproj = END > _R
+                            ? _R * END / (END - _R)          // 正常：透視投影放大
+                            : _R * 3;                         // fallback（幾乎不發生）
+                        // autoRotate 上限
+                        const _targetPxPerFrame = window.innerWidth * 0.6 / 60;
+                        const _maxOmegaDeg = Math.min(0.25, _Rproj > 0
+                            ? _targetPxPerFrame / (_Rproj * Math.PI / 180)
+                            : 0.08);
+                        autoRotateBase  = Math.min(autoRotateBase,  _maxOmegaDeg);
+                        autoRotateSpeed = Math.min(Math.abs(autoRotateSpeed), _maxOmegaDeg)
+                                        * Math.sign(autoRotateSpeed || 1);
+                        // touchSens 上限：velocityX = Δpx × 0.4 × sens
+                        // 視覺位移 = Δpx × 0.4 × sens × Rproj × π/180
+                        // 令視覺比例 = 3 → sens_ideal = 3 / (0.4 × Rproj × π/180)
+                        const _idealTouchSens = 3 / (0.4 * _Rproj * Math.PI / 180);
+                        layoutCfg.touchSens = Math.max(0.05,
+                            Math.min(layoutCfg.touchSens ?? 0.5, Math.min(0.5, _idealTouchSens)));
+                    }
+                }
             })(t0);
         }
 
