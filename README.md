@@ -426,31 +426,11 @@ https://你的帳號.github.io/3d-gallery/
 
 ---
 
-### AG1. 分享相簿進入動畫：從最遠自動推進到舒適距離
+### ~~AG1. 分享相簿進入動畫：從最遠自動推進到舒適距離~~ ✅ 已完成（v9.11）
 
 > **難度**：⭐｜**效益**：讓「最遠進入」不顯突兀，有電影鏡頭拉近感
 
-目前 readonly 固定在 8000px（最遠）並保持不動。加入進入時自動從 8000 緩降到 3500px 的動畫，讓觀看者感受到「鏡頭推近」的歡迎感：
-
-```js
-// 在 buildGallery() 後執行
-function _readonlyZoomInAnimation() {
-    const START = 8000, END = 3500, DURATION = 1800; // ms
-    const t0 = performance.now();
-    function tick(now) {
-        const p = Math.min(1, (now - t0) / DURATION);
-        // easeOutCubic
-        const ease = 1 - Math.pow(1 - p, 3);
-        perspective = START + (END - START) * ease;
-        scene.style.perspective = perspective + 'px';
-        if (p < 1) requestAnimationFrame(tick);
-        else { perspective = END; layoutCfg.persp = END; }
-    }
-    requestAnimationFrame(tick);
-}
-```
-
-**注意**：`buildGallery()` 仍用 8000px 計算環形半徑，保持一致；動畫只改 CSS perspective 不重建 DOM。
+✅ **已於 v9.11 完成並升級**：動態計算 END 值（依張數公式 `ratio * R / (ratio - 1)`），確保前排卡片不超過視窗 75%，並修正兩段式 Firebase 載入的時序問題（等全部照片載完才執行動畫）。
 
 ---
 
@@ -1209,7 +1189,7 @@ src/
 | v11.0+ | AP | PWA 完整離線支援 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AQ | 相簿統計儀表板 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AR | Vite + React + TS 重構 | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
-## 📊 完整開發優先建議矩陣（v9.0 更新）
+## 📊 完整開發優先建議矩陣（v9.11 更新）
 
 | 版本 | ID | 功能名稱 | 難度 | 視覺 | 效益 | 狀態 |
 |---|---|---|---|---|---|---|
@@ -1219,17 +1199,35 @@ src/
 | v7.0 | U W Y AA | 版型 / 波浪 / 公開連結 / 公開規則 | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v8.0 | — | 自動還原 + 手動還原 + 一鍵刪除 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v8.1 | — | 多排圓圈 + 深度暗化 + 沉浸模式 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
-| **v9.0** | **—** | **手機折疊面板 + Pinch 縮放** | **⭐⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 最新完成** |
-| **v9.0** | **AE** | **批次上傳進度條** | **⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
-| **v9.0** | **AS** | **旋轉靈敏度細調（拖曳/觸控/鍵盤）** | **⭐** | **⭐** | **⭐⭐⭐** | **✅ 已完成** |
-| **v9.0** | **AT** | **卡片陰影深度動畫** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐** | **✅ 已完成** |
-| **v9.0** | **AU** | **沉浸模式五情境預設** | **⭐⭐** | **⭐⭐⭐⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
-| v9.0 | AB | EXIF 自動日期 / 相機型號 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🔥 最優先 |
-| v9.0 | AC | 即時關鍵字搜尋 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🔥 最優先 |
-| v9.0 | AD | 幻燈片播放模式 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 🔥 最優先 |
-| v9.0 | AF | 多維度排序選項 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
-| v9.0 | AG | 備份匯出 ZIP | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
-| v9.0 | AV | 卡片自動對焦 Snap | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.0 | — | 手機折疊面板 + Pinch 縮放 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v9.0 | AE | 批次上傳進度條 | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ✅ 已完成 |
+| v9.0 | AS | 旋轉靈敏度細調（拖曳/觸控/鍵盤） | ⭐ | ⭐ | ⭐⭐⭐ | ✅ 已完成 |
+| v9.0 | AT | 卡片陰影深度動畫 | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ✅ 已完成 |
+| v9.0 | AU | 沉浸模式五情境預設 | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ 已完成 |
+| v9.2～v9.5 | — | 手機效能 / 角度優先載入 / 光照優化 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| v9.6～v9.7 | AF | 手機速度修正 + 多維度排序 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐ | ✅ 已完成 |
+| v9.8～v9.9 | — | 手機效能升級 + 分享相簿遠景修正 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
+| **v9.10** | **—** | **靜態骨架屏 / 跳波浪動畫 / CHUNK_SIZE 6 / 唯讀優化** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.11** | **AG1** | **分享相簿動態透視入場動畫（自適應張數）** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.11** | **—** | **控制面板 preserve-3d 穿透修正（三層防護）** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.11** | **—** | **拖曳方向判斷修正（totalDx 防手抖）** | **⭐** | **⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.12** | **BG** | **img.decode() 非同步解碼防主執行緒阻塞** | **⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.12** | **BH** | **IndexedDB 取代 localStorage（突破 5MB 限制）** | **⭐⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.12** | **BI** | **分享相簿觀看次數統計** | **⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.12** | **BJ** | **QR Code 一鍵產生分享** | **⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.12** | **BK** | **AG2 手機端輕觸暫停/繼續旋轉** | **⭐** | **⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
+| v9.x | AB | EXIF 自動日期 / 相機型號 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | AC | 即時關鍵字搜尋 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | AD | 幻燈片播放模式 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | AG | 備份匯出 ZIP | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | AY | 慣性停止後吸附最近卡片 Snap | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | AZ | 版型抽屜光源角度滑桿 | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | 📝 推薦 |
+| v9.x | BA | 快速跳至指定卡片（Ctrl+G） | ⭐ | ⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | BE | 主題色相旋鈕（360° 自訂色系） | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | BF | 卡片懸停 3D 傾斜光澤 Tilt Effect | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | BL | 景深模糊效果（後排 blur，前排清晰） | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
+| v9.x | BM | 相片邊框樣式選擇（寶麗來/圓角/無邊框） | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | 📝 推薦 |
+| v9.x | BN | 手機 Haptic Feedback 震動回饋 | ⭐ | ⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
 | v10.0 | AH | 相簿封面 / 個人資料頁 | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
 | v10.0 | AI | 圖片按讚 / 收藏 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
 | v10.0 | AJ | 評分系統（★） | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | 📅 中期 |
@@ -1238,11 +1236,16 @@ src/
 | v10.0 | AM | 地圖模式（Leaflet.js） | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 📅 中期 |
 | v10.0 | AN | AI 自動命名（Gemini Vision） | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
 | v10.0 | AW | 語音控制（Web Speech API） | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | 📅 中期 |
+| v10.0 | BO | 分享相簿密碼保護 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | BP | 分享相簿到期時間設定 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | BQ | 相片分組 / 子相簿 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
+| v10.0 | BR | OffscreenCanvas Worker 圖片壓縮 | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📅 中期 |
 | v11.0+ | AO | 旋轉動畫匯出 WebM | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AP | PWA 完整離線支援 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AQ | 相簿統計儀表板 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AR | Vite + React + TS 重構 | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 | v11.0+ | AX | 相片水印 / 版權標記 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
+| v11.0+ | BS | CDN 圖片自適應尺寸（Cloudinary/imgix） | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🚀 長期 |
 
 ---
 
@@ -1421,6 +1424,309 @@ card.addEventListener('mouseleave', () => {
     transition: background 0.1s ease;
 }
 ```
+
+---
+
+## 🆕 v9.12 立即可做（從 v9.10/v9.11 延伸的精準小優化）
+
+> 每項均可獨立實作，互不依賴，適合逐項完成再部署。
+
+---
+
+### BG. `img.decode()` 非同步解碼，防主執行緒阻塞
+
+> **難度**：⭐｜**效益**：手機載入大量圖片時，不再因圖片解碼造成畫面凍結 / 卡頓
+
+目前圖片 `src` 設定後，瀏覽器在主執行緒同步解碼，每張約耗 5-20ms，40 張相簿可累積 200-800ms 阻塞。改用 `.decode()` API：
+
+```js
+const img = new Image();
+img.src = url;
+img.decode()
+    .then(() => { cardImg.src = url; cardImg.classList.add('img-loaded'); })
+    .catch(() => { cardImg.src = url; });   // fallback
+```
+
+**效益量化**：40 張相簿主執行緒可騰出約 300ms，手機滾動/旋轉明顯更順滑。
+**相容性**：Chrome 65+、Safari 11.1+、Firefox 63+ 均支援，無須 polyfill。
+
+---
+
+### BH. IndexedDB 取代 localStorage（突破 5MB 儲存限制）
+
+> **難度**：⭐⭐⭐｜**效益**：本機相簿可存 200+ 張高清 WebP，不再因 QuotaExceededError 遺失資料
+
+```js
+const GalleryDB = {
+    _db: null,
+    async open() {
+        return new Promise((res, rej) => {
+            const req = indexedDB.open('GalleryDB', 1);
+            req.onupgradeneeded = e => {
+                e.target.result.createObjectStore('images', { keyPath: 'id' });
+                e.target.result.createObjectStore('meta',   { keyPath: 'key' });
+            };
+            req.onsuccess = e => { this._db = e.target.result; res(); };
+            req.onerror   = e => rej(e.target.error);
+        });
+    },
+    async saveImages(data) {
+        const tx = this._db.transaction('images', 'readwrite');
+        const store = tx.objectStore('images');
+        store.clear();
+        data.forEach((img, i) => store.put({ id: i, ...img }));
+        return tx.complete;
+    },
+    async loadImages() {
+        return new Promise(res => {
+            const tx  = this._db.transaction('images', 'readonly');
+            const req = tx.objectStore('images').getAll();
+            req.onsuccess = e => res(e.target.result);
+        });
+    }
+};
+```
+
+**遷移策略**：首次載入若 localStorage 有舊資料 → 自動搬移至 IndexedDB → 清除 localStorage，對使用者完全透明。
+
+---
+
+### BI. 分享相簿觀看次數統計
+
+> **難度**：⭐⭐｜**效益**：相簿擁有者可知道有多少人看過，社交確認感強烈
+
+```js
+// 唯讀模式載入完成後（靜默執行，不影響體驗）
+async function _trackView(ownerId) {
+    try {
+        await updateDoc(doc(db, `users/${ownerId}/profile/main`), {
+            viewCount: increment(1),
+            lastViewedAt: serverTimestamp()
+        });
+    } catch (e) { /* 靜默失敗 */ }
+}
+```
+
+**擁有者端顯示**：控制面板加入 👁️ `128 次觀看` 小標籤；可用 Firestore `onSnapshot` 即時更新。
+
+---
+
+### BJ. QR Code 一鍵產生分享
+
+> **難度**：⭐｜**效益**：手機展示現場直接掃碼，比傳連結直覺 10 倍
+
+```js
+import QRCode from 'https://esm.sh/qrcode';
+
+async function showQRCode(url) {
+    const canvas = document.createElement('canvas');
+    await QRCode.toCanvas(canvas, url, {
+        width: 220,
+        color: { dark: '#ffffff', light: '#1a1a2e' }  // 配合深色主題
+    });
+    const modal = document.getElementById('qr-modal');
+    modal.querySelector('.qr-canvas-wrap').replaceChildren(canvas);
+    modal.style.display = 'flex';
+}
+```
+
+**UI 設計**：深色 Modal + 大型 QR Code + 「掃碼即可觀看此相簿」說明文字；長按可儲存圖片。
+擁有者分享按鈕旁加 `[📱 QR]`；唯讀模式右上角加相同按鈕。
+
+---
+
+### BK. 手機端輕觸暫停 / 再輕觸繼續旋轉（AG2 實作）
+
+> **難度**：⭐｜**效益**：手機觀看者最直覺的操作，比找暫停按鈕快得多
+
+```js
+// handleDragEnd 最後加入（dist = 拖曳總距離）
+if (_isReadonlyMode && dist < 8 && !e.target.closest('.carousel-item')) {
+    isAutoRotating = !isAutoRotating;
+    isAutoRotating ? startAutoRotate() : stopAutoRotate();
+    showBanner(isAutoRotating ? '▶ 旋轉中' : '⏸ 已暫停', false, 1200);
+}
+```
+
+---
+
+### BL. 景深模糊效果（後排卡片 Bokeh）
+
+> **難度**：⭐⭐｜**效益**：視覺上更接近真實鏡頭景深，3D 立體感倍增
+
+```js
+// applyTransform() 中（桌機限定，手機因 GPU 限制預設關閉）
+if (layoutCfg.bokehEnabled && !_isMobileDevice) {
+    const blurPx = Math.max(0, (1 - bright) * 3.5).toFixed(1);
+    card.style.filter = `brightness(${bright.toFixed(3)}) blur(${blurPx}px)`;
+} else {
+    card.style.filter = `brightness(${bright.toFixed(3)})`;
+}
+```
+
+版型抽屜加入「✨ 景深效果」開關；`will-change: filter` 提前分配 GPU 合成層。
+
+---
+
+### BM. 相片邊框樣式選擇（5 種）
+
+> **難度**：⭐⭐｜**效益**：相簿視覺風格個人化，質感提升顯著
+
+```js
+const FRAME_STYLES = {
+    '無邊框': { padding: '0',               background: 'none',          borderRadius: '12px' },
+    '細白框': { padding: '8px',             background: '#ffffff',        borderRadius: '4px'  },
+    '寶麗來': { padding: '8px 8px 32px 8px',background: '#f8f4e9',        borderRadius: '2px'  },
+    '圓角卡': { padding: '6px',             background: 'rgba(255,255,255,.12)', borderRadius: '20px' },
+    '金屬框': { padding: '6px',             background: 'linear-gradient(135deg,#c8a96e,#8b6914)', borderRadius: '8px' },
+};
+```
+
+「寶麗來」模式底部留白自動加入小字日期；樣式存入 layoutCfg 並隨版型同步至雲端。
+
+---
+
+### BN. 手機 Haptic Feedback 震動回饋
+
+> **難度**：⭐｜**效益**：觸覺確認感，Android Chrome 支援，iOS 靜默忽略無副作用
+
+```js
+const haptic = (pattern) => navigator.vibrate?.(pattern);
+
+// 建議加入時機：
+haptic([8, 0, 8]);    // snap 吸附到正前方卡片（雙震）
+haptic(15);           // 輕觸暫停/繼續（單震）
+haptic([30, 50, 30]); // 批次刪除完成（強調）
+haptic(20);           // 上傳成功
+```
+
+---
+
+## 🔮 v10.0 中期新增建議
+
+---
+
+### BO. 分享相簿密碼保護
+
+> **難度**：⭐⭐⭐｜**效益**：私密相簿（婚禮/派對）可設密碼，比公開連結更安全
+
+```js
+// 唯讀模式：SubtleCrypto 前端 hash 比對（不傳明碼到伺服器）
+async function _checkPassword(storedHash) {
+    const input = prompt('🔒 此相簿已設密碼保護，請輸入密碼：');
+    if (!input) { location.href = '/'; return false; }
+    const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    if (hash !== storedHash) { alert('❌ 密碼錯誤'); location.href = '/'; return false; }
+    return true;
+}
+```
+
+Firestore `shareMode: 'password'` + `sharePasswordHash: 'sha256(...)'`；UI：全螢幕密碼 Modal，背景模糊。
+
+---
+
+### BP. 分享相簿到期時間設定
+
+> **難度**：⭐⭐｜**效益**：限時分享（活動/派對），到期自動失效，無需手動關閉
+
+```js
+// 擁有者快速按鈕：7天 / 30天 / 永久 / 自訂
+async function setShareExpiry(days) {
+    const expiresAt = days > 0
+        ? Timestamp.fromDate(new Date(Date.now() + days * 86_400_000))
+        : null;
+    await updateDoc(profileRef, { expiresAt });
+}
+
+// 唯讀模式檢查
+if (profile.expiresAt && profile.expiresAt.toDate() < new Date()) {
+    // 顯示到期提示頁
+}
+```
+
+控制面板顯示倒計時：`⏰ 分享將於 5 天後到期 [延長]`
+
+---
+
+### BQ. 相片分組 / 子相簿（Album within Album）
+
+> **難度**：⭐⭐⭐⭐｜**效益**：旅行多天、婚禮多場景可分類瀏覽，解決大量相片雜亂問題
+
+```
+Firestore: users/{uid}/albums/{albumId}
+  name: '第一天：抵達東京'  |  cover: 'url'  |  imageIds: [...]
+
+users/{uid}/images/{imgId}
+  albumId: 'album_tokyo_day1'   ← 新增欄位
+```
+
+頂部標籤列整合子相簿切換；`?view=UID&album=ALBUM_ID` 可直接分享特定子相簿。
+
+---
+
+### BR. OffscreenCanvas Worker 圖片壓縮
+
+> **難度**：⭐⭐⭐⭐｜**效益**：批次上傳 20 張時，UI 完全不凍結，使用者可繼續操作
+
+```js
+// 以 Blob URL 內聯 Worker，不需額外 .js 檔
+const workerCode = `
+self.onmessage = async ({ data: { id, bitmap, maxW, quality } }) => {
+    const h = Math.round(bitmap.height * maxW / bitmap.width);
+    const canvas = new OffscreenCanvas(maxW, h);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, maxW, h);
+    const blob = await canvas.convertToBlob({ type: 'image/webp', quality });
+    self.postMessage({ id, blob });
+    bitmap.close();
+};`;
+const worker = new Worker(URL.createObjectURL(new Blob([workerCode])));
+worker.postMessage({ id, bitmap, maxW: 1200, quality: 0.82 }, [bitmap]);
+```
+
+---
+
+## 🚀 v11.0+ 長期新增建議
+
+---
+
+### BS. CDN 圖片自適應尺寸（Cloudinary）
+
+> **難度**：⭐⭐⭐⭐｜**效益**：手機載縮圖、桌機載高清，流量節省 60-80%
+
+```js
+function getCdnUrl(originalUrl, widthPx) {
+    return `https://res.cloudinary.com/YOUR_CLOUD/image/fetch/`
+         + `w_${widthPx},f_auto,q_auto/${encodeURIComponent(originalUrl)}`;
+}
+// 建卡時：getCdnUrl(img.src, Math.round(layoutCfg.w * devicePixelRatio))
+```
+
+`f_auto` 自動選 AVIF/WebP；無需修改 Firestore 資料結構，CDN URL 執行期動態生成。
+
+---
+
+### BT. 鍵盤快捷鍵說明面板（`?` 鍵觸發）
+
+> **難度**：⭐｜**效益**：進階使用者秒上手，質感大幅提升
+
+右下角常駐 `?` 小圓按鈕；按 `?` 鍵觸發 Modal 顯示完整快捷鍵表；唯讀模式自動隱藏編輯相關項目。
+
+---
+
+### BU. Progressive Image Loading（模糊預覽 → 高清漸進替換）
+
+> **難度**：⭐⭐⭐｜**效益**：圖片載入中顯示模糊輪廓，觀感遠優於灰色骨架屏
+
+上傳時生成 30×20px 極小縮圖（~200 bytes）存入 Firestore；建卡先顯示模糊版，高清載完平滑替換（`filter: blur(8px) → none`，`transition: 0.5s`）。
+
+---
+
+### BV. 相簿 OG Meta Tags 動態注入（社群分享卡片預覽）
+
+> **難度**：⭐⭐⭐｜**效益**：LINE / Facebook 預覽顯示封面圖 + 標題，點擊率提升 3-5 倍
+
+透過 Firebase Functions SSR，在 `</head>` 前注入 `og:title`、`og:image`、`og:description`、`twitter:card` 標籤，其餘 SPA 行為不受影響。
 
 ---
 
