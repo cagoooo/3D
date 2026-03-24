@@ -2935,10 +2935,17 @@
         //  功能Y：公開分享連結 / 唯讀模式
         // ================================================================
 
-        // AG1：進入分享相簿時的鏡頭推近動畫（8000 → 3500px，1.8s easeOutCubic）
+        // AG1：進入分享相簿時的鏡頭推近動畫（8000 → 動態終點，1.8s easeOutCubic）
+        // 終點依相簿張數動態計算：確保前排卡片高度 ≤ 視窗高度 75%，大相簿自動拉遠
         // buildGallery() 仍以 8000px 計算環形半徑；動畫只改 CSS，不重建 DOM。
         function _readonlyZoomInAnimation() {
-            const START = 8000, END = 3500, DURATION = 1800;
+            const START = 8000;
+            // 動態計算安全終點：前排卡片高 ≤ innerHeight * 0.75
+            const _R   = (layoutCfg.w + 24) * (perRowGlobal || galleryCards.length || 1) / (2 * Math.PI);
+            const _ratio = 0.75 * window.innerHeight / layoutCfg.h;
+            const _safe  = _ratio > 1 ? Math.ceil(_ratio * _R / (_ratio - 1)) : 8000;
+            const END    = Math.min(8000, Math.max(3200, _safe));  // 最近 3200，最遠 8000
+            const DURATION = 1800;
             const t0 = performance.now();
             (function tick(now) {
                 const p    = Math.min(1, (now - t0) / DURATION);
