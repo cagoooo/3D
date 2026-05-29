@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>光廊 CINEMA · 3D 畫廊</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎞️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Noto+Serif+TC:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   光廊 CINEMA — Cover Flow 電影院介面（Vanilla JS 單檔實作）
+   設計交接包 design_handoff_cinema_3d_gallery 的像素級落地版
+   ============================================================ */
+:root{
+  --cin-accent:#f0d9a8;            /* 主色 accent */
+  --cin-tone:#16130d;             /* 聚光中心色調 noir */
+  --serif:'Noto Serif TC','Cormorant Garamond',Georgia,serif;
+  --sans:'Helvetica Neue','Noto Sans TC',Helvetica,Arial,sans-serif;
+  --mono:'Space Mono',ui-monospace,monospace;
+  --title-font:var(--serif);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;}
+body{font-family:var(--sans);color:#fff;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+::-webkit-scrollbar{height:0;width:0;}
+@keyframes cinFade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+@keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+
+#stage-root{position:fixed;inset:0;overflow:hidden;background:#000;}
+
+/* ── 層 0：聚光背景 spotlight ── */
+.spotlight{position:absolute;inset:0;transition:background .6s;
+  background:radial-gradient(62% 56% at 50% 41%, var(--cin-tone) 0%, rgba(8,7,5,.35) 46%, #000 80%);}
+
+/* ── 層 1：Cover Flow 舞台 ── */
+.cf-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  cursor:grab;touch-action:none;}
+.cf-stage:active{cursor:grabbing;}
+.cf-ring{position:relative;transform-style:preserve-3d;width:1px;height:1px;transform:rotateX(3deg);}
+.cf-card{position:absolute;transform-style:preserve-3d;will-change:transform,opacity;}
+.cf-card-img{width:100%;height:100%;border-radius:8px;overflow:hidden;
+  background-size:cover;background-position:center;will-change:filter;}
+
+/* ── 暗角 vignette / 噪點 grain ── */
+.vignette{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 180px 24px rgba(0,0,0,.7);}
+.grain{position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+/* ── letterbox 黑邊 ── */
+.lb-bar{position:absolute;left:0;right:0;height:28px;background:#000;z-index:30;}
+.lb-bar.top{top:0;}
+.lb-bar.bot{bottom:0;}
+
+/* ── 頂部 chrome ── */
+.chrome{position:absolute;top:44px;left:40px;right:40px;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;}
+.wordmark{font-family:var(--serif);font-size:22px;font-weight:600;letter-spacing:.04em;}
+.wordmark .sub{font-family:var(--sans);font-size:9.5px;letter-spacing:.42em;margin-left:11px;color:rgba(255,255,255,.4);}
+.filter{display:flex;gap:2px;padding:3px;border-radius:999px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);}
+.filter .chip{font-size:11.5px;letter-spacing:.1em;padding:5px 16px;border-radius:999px;cursor:pointer;
+  transition:all .2s;background:transparent;color:rgba(255,255,255,.42);white-space:nowrap;}
+.filter .chip.on{background:rgba(255,255,255,.12);color:#fff;}
+.avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;cursor:pointer;
+  background-size:cover;background-position:center;
+  box-shadow:0 0 0 1.5px rgba(255,255,255,.25),0 2px 8px rgba(0,0,0,.4);}
+
+/* ── 選單（popover / menu）── */
+.menu{position:absolute;z-index:40;padding:6px;width:196px;
+  background:rgba(16,14,11,.96);border:1px solid rgba(255,255,255,.1);border-radius:14px;
+  box-shadow:0 24px 60px -16px rgba(0,0,0,.85);animation:cinFade .18s ease;}
+.menu.tools{width:210px;box-shadow:0 -10px 60px -16px rgba(0,0,0,.85);}
+.menu-item{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;cursor:pointer;
+  color:rgba(255,255,255,.82);font-size:13.5px;letter-spacing:.02em;white-space:nowrap;transition:background .12s;}
+.menu-item:hover{background:rgba(255,255,255,.07);}
+.menu-item.danger{color:#f08a7a;}
+.menu-item.danger:hover{background:rgba(240,138,122,.1);}
+.menu-item .lbl{flex:1;}
+.menu-item .dot{width:6px;height:6px;border-radius:50%;background:var(--cin-accent);flex-shrink:0;}
+.menu-sep{height:1px;background:rgba(255,255,255,.08);margin:5px 8px;}
+.menu-sheet-mask{position:fixed;inset:0;z-index:39;background:rgba(0,0,0,.45);animation:cinFade .2s ease;display:none;}
+
+/* ── 下三分之一字幕 lower-third ── */
+.caption{position:absolute;left:56px;bottom:132px;z-index:20;max-width:540px;transition:bottom .3s;}
+.caption .meta{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+.caption .meta .bar{width:26px;height:1.5px;background:var(--cin-accent);}
+.caption .meta .lbl{font-size:10.5px;letter-spacing:.34em;color:var(--cin-accent);}
+.caption .title{font-family:var(--title-font);font-size:42px;font-weight:600;line-height:1.04;
+  text-shadow:0 2px 34px rgba(0,0,0,.7);}
+.caption .sub{font-size:12px;letter-spacing:.18em;color:rgba(255,255,255,.5);margin-top:10px;display:flex;gap:16px;}
+.caption .sub .cam{font-family:var(--mono);}
+
+/* ── 播放器控制列 dock ── */
+.dock{position:absolute;left:50%;bottom:46px;transform:translateX(-50%);z-index:25;
+  display:flex;align-items:center;gap:13px;transition:bottom .3s;}
+.rbtn{width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .18s;color:rgba(255,255,255,.85);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);}
+.rbtn:hover{background:rgba(255,255,255,.13);}
+.rbtn.on{background:var(--cin-accent);color:#0a0a0a;border:none;}
+.rbtn.big{width:52px;height:52px;background:var(--cin-accent);color:#0a0a0a;border:none;
+  box-shadow:0 8px 26px -6px color-mix(in srgb,var(--cin-accent) 55%,transparent);}
+.dock .vsep{width:1px;height:26px;background:rgba(255,255,255,.14);margin:0 3px;}
+
+/* ── 進度條 scrub ── */
+.scrub{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:25;width:320px;transition:bottom .3s;}
+.scrub .hit{height:16px;display:flex;align-items:center;cursor:pointer;}
+.scrub .track{width:100%;height:2px;border-radius:2px;background:rgba(255,255,255,.14);}
+.scrub .fill{height:100%;border-radius:2px;background:var(--cin-accent);transition:width .3s;}
+
+/* ── 縮圖帶 thumbs ── */
+.thumbs{position:absolute;left:0;right:0;bottom:32px;z-index:24;display:none;
+  justify-content:center;gap:8px;padding:0 20px;overflow-x:auto;}
+.thumbs.on{display:flex;}
+.thumb{width:64px;height:44px;flex-shrink:0;border-radius:6px;cursor:pointer;
+  background-size:cover;background-position:center;transition:all .2s;
+  outline:1px solid rgba(255,255,255,.12);opacity:.55;}
+.thumb.cur{outline:2px solid var(--cin-accent);outline-offset:1px;opacity:1;}
+
+/* ── 提示 hint ── */
+.hint{position:absolute;right:44px;bottom:30px;z-index:20;font-family:var(--mono);
+  font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.28);}
+
+/* ── 離開沉浸膠囊 ── */
+.exit-imm{position:absolute;top:40px;right:40px;z-index:40;display:none;align-items:center;gap:8px;
+  padding:8px 16px;border-radius:999px;cursor:pointer;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);font-size:12.5px;}
+
+/* ── 燈箱 lightbox ── */
+.lightbox{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.92);display:none;
+  align-items:center;justify-content:center;animation:cinFade .25s ease;}
+.lightbox.on{display:flex;}
+.lb-wrap{position:relative;max-width:78vw;max-height:82vh;}
+.lb-img{max-width:78vw;max-height:76vh;object-fit:contain;border-radius:8px;
+  box-shadow:0 40px 100px -20px rgba(0,0,0,.9);display:block;}
+.lb-info{position:absolute;left:4px;right:4px;bottom:-54px;}
+.lb-info .t{font-family:var(--title-font);font-size:26px;font-weight:600;}
+.lb-info .s{font-size:12px;letter-spacing:.16em;color:rgba(255,255,255,.55);margin-top:6px;display:flex;gap:16px;}
+.lb-info .s .tag{color:var(--cin-accent);}
+.lb-info .s .idx{margin-left:auto;font-family:var(--mono);}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.07);}
+.lb-nav:hover{background:rgba(255,255,255,.14);}
+.lb-nav.prev{left:34px;}
+.lb-nav.next{right:34px;}
+.lb-close{position:absolute;top:30px;right:34px;width:42px;height:42px;border-radius:50%;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);}
+.lb-close:hover{background:rgba(255,255,255,.16);}
+
+/* ── toast ── */
+.toast{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);z-index:60;display:none;
+  padding:10px 20px;border-radius:999px;background:rgba(16,14,11,.94);border:1px solid rgba(255,255,255,.12);
+  font-size:13px;letter-spacing:.04em;box-shadow:0 14px 40px -10px rgba(0,0,0,.7);animation:cinFade .3s ease;}
+.toast.on{display:block;}
+
+/* ── 自家 Tweaks 面板（電影院黑色玻璃版）── */
+.tweaks-fab{position:absolute;top:44px;right:88px;z-index:22;width:30px;height:30px;border-radius:50%;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);transition:all .18s;}
+.tweaks-fab:hover{background:rgba(255,255,255,.13);color:#fff;}
+.tweaks{position:absolute;top:0;right:0;bottom:0;width:300px;z-index:70;transform:translateX(100%);
+  transition:transform .32s cubic-bezier(.4,0,.2,1);background:rgba(12,10,8,.97);
+  border-left:1px solid rgba(255,255,255,.1);box-shadow:-24px 0 60px -20px rgba(0,0,0,.8);
+  display:flex;flex-direction:column;overflow:hidden;}
+.tweaks.on{transform:translateX(0);}
+.tweaks-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 14px;
+  border-bottom:1px solid rgba(255,255,255,.07);}
+.tweaks-hd b{font-family:var(--serif);font-size:16px;font-weight:600;letter-spacing:.04em;}
+.tweaks-hd .x{width:26px;height:26px;border-radius:8px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;color:rgba(255,255,255,.5);}
+.tweaks-hd .x:hover{background:rgba(255,255,255,.08);color:#fff;}
+.tweaks-body{padding:6px 18px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;}
+.tw-sect{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.4);padding:12px 0 2px;}
+.tw-row{display:flex;flex-direction:column;gap:7px;}
+.tw-row.h{flex-direction:row;align-items:center;justify-content:space-between;}
+.tw-lbl{font-size:12.5px;color:rgba(255,255,255,.7);display:flex;justify-content:space-between;}
+.tw-lbl .v{color:rgba(255,255,255,.42);font-family:var(--mono);font-size:11px;}
+.tw-seg{display:flex;gap:3px;padding:3px;border-radius:9px;background:rgba(255,255,255,.05);}
+.tw-seg button{flex:1;border:0;background:transparent;color:rgba(255,255,255,.5);font:inherit;font-size:11.5px;
+  padding:6px 4px;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.tw-seg button.on{background:rgba(255,255,255,.13);color:#fff;}
+.tw-swatches{display:flex;gap:8px;}
+.tw-sw{flex:1;height:34px;border-radius:8px;cursor:pointer;position:relative;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.15);transition:transform .12s;}
+.tw-sw:hover{transform:translateY(-1px);}
+.tw-sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.4);}
+.tw-range{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:999px;
+  background:rgba(255,255,255,.16);outline:none;}
+.tw-range::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+  background:var(--cin-accent);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.5);}
+.tw-range::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;background:var(--cin-accent);cursor:pointer;}
+.tw-toggle{position:relative;width:40px;height:22px;border:0;border-radius:999px;background:rgba(255,255,255,.18);
+  cursor:pointer;transition:background .15s;padding:0;flex-shrink:0;}
+.tw-toggle.on{background:var(--cin-accent);}
+.tw-toggle i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;
+  transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.4);}
+.tw-toggle.on i{transform:translateX(18px);}
+
+/* ============================================================
+   RWD — 平板 / 手機（落地 MOBILE_RWD.md）
+   ============================================================ */
+@media (max-width:1024px){
+  .chrome{left:24px;right:24px;}
+  .caption{left:34px;}
+}
+@media (max-width:768px){
+  .lb-bar{display:none !important;}                          /* 手機關 letterbox 爭高度 */
+  .chrome{top:calc(env(safe-area-inset-top) + 12px);left:18px;right:18px;gap:10px;}
+  .wordmark{font-size:18px;}
+  .filter{overflow-x:auto;scrollbar-width:none;max-width:54vw;}
+  .filter::-webkit-scrollbar{display:none;}
+  .filter .chip{padding:7px 14px;}
+  .tweaks-fab{top:calc(env(safe-area-inset-top) + 12px);right:62px;}
+  .caption{left:22px;bottom:120px;max-width:78vw;}
+  .caption .title{font-size:26px;}
+  .dock{bottom:calc(env(safe-area-inset-bottom) + 14px);gap:10px;}
+  .rbtn{width:44px;height:44px;}
+  .rbtn.big{width:56px;height:56px;}
+  .scrub{width:min(86vw,360px);bottom:calc(env(safe-area-inset-bottom) + 78px);}
+  .scrub .hit{height:18px;}
+  .thumbs{bottom:calc(env(safe-area-inset-bottom) + 82px);justify-content:flex-start;}
+  .thumb{width:52px;height:36px;}
+  .hint{display:none;}
+  .vignette{box-shadow:inset 0 0 120px 16px rgba(0,0,0,.65);}    /* 手機減弱 */
+  .tweaks{width:100vw;}
+  .lb-img{max-width:100vw;max-height:100vh;}
+  .lb-nav{width:40px;height:40px;}.lb-nav.prev{left:12px;}.lb-nav.next{right:12px;}
+  .lb-close{top:calc(env(safe-area-inset-top) + 12px);right:16px;}
+  /* 帳號 / 工具選單改 bottom sheet */
+  .menu.sheet{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;
+    border-radius:18px 18px 0 0;padding:10px 14px calc(env(safe-area-inset-bottom) + 14px);
+    animation:sheetUp .26s cubic-bezier(.4,0,.2,1);}
+  .menu.sheet .menu-item{padding:13px 12px;font-size:15px;}
+  .menu-sheet-mask.on{display:block;}
+}
+@media (max-width:768px) and (orientation:landscape){
+  .caption .title{font-size:22px;}
+  .caption{bottom:96px;}
+}
+@media (max-width:480px){ .wordmark .sub{display:none;} }
+/* 手機效能：關倒影由 JS 控制（reflection=false）；grain 上限由 JS 夾 */
+</style>
+</head>
+<body>
+<div id="stage-root"></div>
+
+<script>
+/* ============================================================
+   光廊 CINEMA — Vanilla 實作
+   ============================================================ */
+(function(){
+'use strict';
+
+// ── 裝置偵測（沿用原專案做法）──
+// 以螢幕寬度為主、觸控僅在 ≤1024px 時才視為 mobile（避免觸控筆電/大觸控螢幕被當手機用小卡）
+const isMobile = matchMedia('(max-width:768px)').matches
+              || (('ontouchstart' in window) && matchMedia('(max-width:1024px)').matches);
+const isTablet = !isMobile && matchMedia('(max-width:1024px)').matches;
+if (isMobile) document.body.classList.add('mobile-device');
+const lowEnd = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
+            || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+
+// ── 線條圖示（26 個 path，stroke 走 currentColor）──
+const PATHS = {
+  upload:'M12 16V4m0 0L7 9m5-5l5 5 M4 17v1a3 3 0 003 3h10a3 3 0 003-3v-1',
+  play:'M7 5l12 7-12 7V5z', pause:'M8 5v14M16 5v14',
+  grid:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  edit:'M4 20h4l10.5-10.5a2 2 0 00-3-3L5 17v3z M13.5 6.5l3 3',
+  tag:'M3 11l8-8 9 9-8 8-9-9V3 M7.5 7.5h.01',
+  layers:'M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5 M3 17l9 5 9-5',
+  sliders:'M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1 M14 4v4M6 10v4M17 16v4',
+  share:'M16 6l-4-4-4 4 M12 2v13 M4 12v6a2 2 0 002 2h12a2 2 0 002-2v-6',
+  globe:'M12 3a9 9 0 100 18 9 9 0 000-18z M3 12h18 M12 3c2.5 2.7 2.5 15.3 0 18 M12 3c-2.5 2.7-2.5 15.3 0 18',
+  more:'M5 12h.01M12 12h.01M19 12h.01', chevL:'M15 6l-6 6 6 6', chevR:'M9 6l6 6-6 6',
+  search:'M11 4a7 7 0 100 14 7 7 0 000-14z M21 21l-4.3-4.3',
+  trash:'M4 7h16 M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2 M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13',
+  cloud:'M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9a3.5 3.5 0 01-1 6.9 M12 12v6m0-6l-2.5 2.5M12 12l2.5 2.5',
+  cloudDown:'M7 17a4 4 0 01-.5-7.97A6 6 0 0118 8a3.5 3.5 0 01-1 6.9 M12 11v6m0 0l-2.5-2.5M12 17l2.5-2.5',
+  user:'M12 12a4 4 0 100-8 4 4 0 000 8z M5 21a7 7 0 0114 0', x:'M6 6l12 12M18 6L6 18',
+  contrast:'M12 3a9 9 0 100 18 9 9 0 000-18z M12 3v18', logout:'M15 17l5-5-5-5 M20 12H9 M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3',
+  star:'M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.8 6.7 19.6l1.1-6L3.4 9.4l6-.8L12 3z',
+  expand:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+};
+function icon(name, opt){
+  opt = opt || {};
+  const size = opt.size || 18, sw = opt.stroke || 1.6, fill = opt.fill;
+  const d = PATHS[name] || '';
+  const segs = d.split(' M').map((s,i)=> '<path d="'+(i===0?s:'M'+s)+'"/>').join('');
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="'+(fill?'currentColor':'none')+
+    '" stroke="'+(fill?'none':'currentColor')+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0">'+segs+'</svg>';
+}
+
+// ── 樣本照片（Unsplash，正式環境改接 Firebase/localStorage）──
+const U = (id,w)=>`https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w||1000}&q=80`;
+let PHOTOS = [
+  {id:'p1',src:U('1464822759023-fed622ff2c3b'),title:'克盧恩山谷晨光',date:'2024.03.18',tag:'風景',cam:'EOS R5'},
+  {id:'p2',src:U('1507525428034-b723cf961d3e'),title:'退潮的海岸線',date:'2023.08.02',tag:'旅行',cam:'A7 IV'},
+  {id:'p3',src:U('1441974231531-c6227db76b6e'),title:'針葉林的光束',date:'2024.01.11',tag:'風景',cam:'EOS R6'},
+  {id:'p4',src:U('1470071459604-3b5ec3a7fe05'),title:'霧鎖湖面',date:'2023.11.27',tag:'風景',cam:'X-T5'},
+  {id:'p5',src:U('1469474968028-56623f02e42e'),title:'沙丘與曙光',date:'2023.05.19',tag:'旅行',cam:'A7R V'},
+  {id:'p6',src:U('1506905925346-21bda4d32df4'),title:'雪峰湖畔',date:'2024.02.06',tag:'風景',cam:'Z8'},
+  {id:'p7',src:U('1454496522488-7a8e488e8606'),title:'極光之夜',date:'2023.12.30',tag:'旅行',cam:'A7S III'},
+  {id:'p8',src:U('1426604966848-d7adac402bff'),title:'苔原溪谷',date:'2023.09.14',tag:'風景',cam:'EOS R5'},
+  {id:'p9',src:U('1418065460487-3e41a6c84dc5'),title:'杉林天際',date:'2024.04.01',tag:'人物',cam:'GFX 100'},
+];
+
+// ── tokens ──
+const TONES = {noir:'#16130d',cosmos:'#1b1b30',sunset:'#3a1604',forest:'#0c2a1a',rose:'#2a0c28'};
+const TONE_LABELS = {noir:'純黑',cosmos:'宇宙',sunset:'日落',forest:'森林',rose:'玫瑰'};
+const ACCENTS = ['#f0d9a8','#d8a64a','#cfe3ff','#f0bcc4'];
+const SIZES = {
+  '標準':{cardW:300,cardH:425,perspective:1250},
+  '沉浸':{cardW:384,cardH:542,perspective:1380},
+  '橫幅':{cardW:448,cardH:256,perspective:1250},
+  '精選':{cardW:220,cardH:312,perspective:1100},
+};
+
+// ── tweaks（localStorage 持久化）──
+const TWEAK_DEFAULTS = {accent:'#f0d9a8',grain:0.05,vignette:true,letterbox:true,
+  reflection:true,autoSpeed:0.16,size:'標準',serifTitle:true,bgTone:'noir'};
+let tweaks = Object.assign({}, TWEAK_DEFAULTS);
+try{ const s = JSON.parse(localStorage.getItem('cinemaTweaks')||'{}'); tweaks = Object.assign(tweaks, s); }catch(e){}
+const saveTweaks = ()=>{ try{ localStorage.setItem('cinemaTweaks', JSON.stringify(tweaks)); }catch(e){} };
+
+// ── app state ──
+const state = {filter:'全部',front:0,playing:true,immersive:false,thumbsOn:false,lb:null};
+
+// 依裝置 / 情境解析幾何（落地 MOBILE_RWD §2 參數表）
+function resolveGeom(){
+  const imm = state.immersive;
+  let g;
+  if (isMobile){
+    const landscape = matchMedia('(orientation:landscape)').matches;
+    if (imm)            g = {cardW:230,cardH:326,perspective:1050,VIS:2.4,ANGLE:44,SCALE:0.82,tiltX:1};
+    else if (landscape) g = {cardW:150,cardH:212,perspective:950, VIS:2.4,ANGLE:44,SCALE:0.82,tiltX:1};
+    else                g = {cardW:188,cardH:266,perspective:1000,VIS:2.4,ANGLE:44,SCALE:0.82,tiltX:2};
+  } else if (isTablet){
+    const b = imm ? SIZES['沉浸'] : SIZES[tweaks.size];
+    g = {cardW:Math.round(b.cardW*0.83),cardH:Math.round(b.cardH*0.83),perspective:1100,VIS:3.0,ANGLE:46,SCALE:0.83,tiltX:imm?1:2};
+  } else {
+    const b = imm ? SIZES['沉浸'] : SIZES[tweaks.size];
+    g = {cardW:b.cardW,cardH:b.cardH,perspective:b.perspective,VIS:3.6,ANGLE:48,SCALE:0.84,tiltX:imm?1:3};
+  }
+  if (lowEnd) g.VIS = Math.min(g.VIS, 2.0);   // 低階機再縮可見半徑
+  return g;
+}
+
+/* ============================================================
+   Cover Flow 引擎（§5 幾何，Vanilla 重寫）
+   ============================================================ */
+const CoverFlow = (function(){
+  let stage, ring, cards = [], list = [];
+  let pos = 0, vel = 0, snapTo = null, dragging = false, moved = 0, lastX = 0;
+  let startTarget = null, frontIdx = -1, perspNow = 1250, raf = null, saveTimer = null;
+  let geom = resolveGeom();
+  let lastFrameTs = 0;
+  const onFrontCb = []; const onCardClick = []; const onBgTap = [];
+  // 手機光照跳幀
+  let lightSkip = 0;
+
+  const N = ()=> list.length;
+  const spread = ()=> geom.cardW*0.74, edge = ()=> geom.cardW*0.6, depth = ()=> geom.cardW*0.5;
+  const decay = ()=> isMobile ? 0.87 : 0.92;
+  const stopThres = ()=> isMobile ? 0.012 : 0.004;
+  const velCap = ()=> isMobile ? 0.18 : 0.25;
+  const tapThres = ()=> isMobile ? 8 : 5;
+
+  function offset(i){ let r = i - pos; r -= N()*Math.round(r/N()); return r; }
+
+  function build(newList, resetPos){
+    list = newList;
+    ring.innerHTML = '';
+    cards = list.map((p,i)=>{
+      const el = document.createElement('div');
+      el.className = 'cf-card';
+      el.dataset.card = i;
+      el.style.width = geom.cardW+'px'; el.style.height = geom.cardH+'px';
+      el.style.left = (-geom.cardW/2)+'px'; el.style.top = (-geom.cardH/2)+'px';
+      const img = document.createElement('div');
+      img.className = 'cf-card-img';
+      img.style.backgroundImage = `url(${p.src})`;
+      if (tweaks.reflection && !isMobile){
+        img.style.webkitBoxReflect = 'below 10px linear-gradient(transparent 60%, rgba(0,0,0,.24))';
+      }
+      el.appendChild(img);
+      ring.appendChild(el);
+      return el;
+    });
+    if (resetPos){ pos = 0; vel = 0; snapTo = null; frontIdx = -1; }
+    else { try{ const s = +localStorage.getItem('cinemaPos'); if(!isNaN(s)&&s) pos = s; }catch(e){} }
+    ring.style.transform = `rotateX(${geom.tiltX}deg)`;
+    perspNow = geom.perspective;
+    paint(true);
+  }
+
+  function paint(force){
+    if (!ring) return;
+    stage.style.perspective = perspNow+'px';
+    // 手機光照跳幀：每 2 幀才更新 brightness / shadow（force 時必更新）
+    let skip = false;
+    if (isMobile && !force){ lightSkip = (lightSkip+1)%2; skip = lightSkip!==0; }
+    const n = N(), VIS = geom.VIS, ANGLE = geom.ANGLE, SCALE = geom.SCALE;
+    const sp = spread(), eg = edge(), dp = depth();
+    for (let i=0;i<n;i++){
+      const el = cards[i]; if(!el) continue;
+      const a = offset(i), aa = Math.abs(a), s = Math.sign(a);
+      if (aa > VIS+0.6){ el.style.opacity = 0; el.style.pointerEvents='none'; continue; }
+      const near = Math.min(aa,1);
+      const tx = s*(near*sp + Math.max(0,aa-1)*eg);
+      const tz = -aa*dp;
+      const ry = -Math.max(-1.3,Math.min(1.3,a))*ANGLE;
+      const sc = Math.pow(SCALE, Math.min(aa,4));
+      const op = aa>VIS ? Math.max(0,(VIS+0.6-aa)/0.6) : aa>2.6 ? (VIS-aa)/(VIS-2.6)*0.5+0.5 : 1;
+      const focus = aa<0.5;
+      el.style.opacity = op;
+      el.style.pointerEvents = focus ? 'auto':'none';
+      el.style.zIndex = String(1000 - Math.round(aa*10));
+      el.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${sc})`;
+      if (skip) continue;
+      const bright = aa<0.5 ? 1.08 : Math.max(0.34, 1.02-aa*0.3);
+      // 亮度差異閾值跳寫（省 DOM 操作）
+      if (!force && el._bright!==undefined && Math.abs(bright-el._bright)<0.025) continue;
+      el._bright = bright;
+      const inner = el.firstChild;
+      inner.style.filter = `brightness(${bright.toFixed(3)})`;
+      inner.style.boxShadow = focus ? '0 46px 96px -24px rgba(0,0,0,.92)' : '0 28px 58px -22px rgba(0,0,0,.72)';
+      inner.style.outline = focus ? `1px solid ${tweaks.accent}55` : 'none';
+      inner.style.outlineOffset = '5px';
+    }
+    const fi = ((Math.round(pos)%n)+n)%n;
+    if (fi!==frontIdx){ frontIdx = fi; onFrontCb.forEach(f=>f(fi)); }
+  }
+
+  function snapNearest(){ snapTo = Math.round(pos); }
+
+  function tick(ts){
+    raf = requestAnimationFrame(tick);
+    // 手機 RAF 限速 30fps
+    if (isMobile && ts-lastFrameTs < 32){ return; }
+    lastFrameTs = ts;
+    if (!dragging){
+      if (snapTo!=null){
+        const d = snapTo-pos;
+        if (Math.abs(d)<0.001){ pos = snapTo; snapTo = null; }
+        else pos += d*0.14;
+      } else if (state.playing){
+        pos += tweaks.autoSpeed*0.06;
+        if (pos > N()) pos -= N();
+      } else if (Math.abs(vel) > stopThres()){
+        pos += vel; vel *= decay();
+        if (Math.abs(vel) <= stopThres()){ vel = 0; snapNearest(); }
+      }
+    }
+    paint(false);
+  }
+
+  function start(){
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(tick);
+    if (!saveTimer) saveTimer = setInterval(()=>{ try{localStorage.setItem('cinemaPos',String(pos));}catch(e){} }, 1200);
+  }
+  function stop(){ if(raf){cancelAnimationFrame(raf);raf=null;} }
+
+  // ── 互動：拖曳 / 滾輪 / pinch ──
+  function bindEvents(){
+    const down = (e)=>{
+      if (e.target.closest('[data-no-drag]')) return;
+      if (e.touches && e.touches.length>1) return;   // pinch 交給 pinch handler
+      dragging = true; moved = 0; lastX = e.clientX!=null?e.clientX:e.touches[0].clientX;
+      vel = 0; snapTo = null;
+      startTarget = e.target.closest('[data-card]');
+      try{ stage.setPointerCapture && e.pointerId!=null && stage.setPointerCapture(e.pointerId); }catch(_){}
+    };
+    const move = (e)=>{
+      if (!dragging) return;
+      const cx = e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:lastX);
+      const dx = cx-lastX; lastX = cx; moved += Math.abs(dx);
+      const d = -dx/(spread()*2.1);
+      pos += d; vel = Math.max(-velCap(), Math.min(velCap(), d));
+    };
+    const up = (e)=>{
+      if (!dragging) return; dragging = false;
+      if (moved < tapThres()){
+        vel = 0;
+        const tgt = (e.target.closest && e.target.closest('[data-card]')) || startTarget;
+        if (tgt && +tgt.dataset.card === frontIdx) onCardClick.forEach(f=>f(frontIdx));
+        else if (!tgt) onBgTap.forEach(f=>f());
+        snapNearest();
+      }
+    };
+    stage.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    stage.addEventListener('wheel', (e)=>{ e.preventDefault();
+      perspNow = Math.max(700, Math.min(2600, perspNow + e.deltaY*1.1)); }, {passive:false});
+    // 雙指 pinch 調景深
+    let pinchD0 = 0, pinchP0 = 0, pinching = false;
+    const dist = (t)=> Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY);
+    stage.addEventListener('touchstart',(e)=>{ if(e.touches.length===2){ pinching=true;dragging=false;
+      pinchD0=dist(e.touches);pinchP0=perspNow; } },{passive:true});
+    stage.addEventListener('touchmove',(e)=>{ if(pinching&&e.touches.length===2){ e.preventDefault();
+      const r = pinchD0/dist(e.touches); perspNow = Math.max(700,Math.min(2600, pinchP0*r)); } },{passive:false});
+    stage.addEventListener('touchend',(e)=>{ if(e.touches.length<2) pinching=false; },{passive:true});
+  }
+
+  return {
+    init(stageEl, ringEl){ stage = stageEl; ring = ringEl; bindEvents(); },
+    build, start, stop, paint,
+    rebuild(newList){ geom = resolveGeom(); build(newList, true); },
+    refreshGeom(newList){ geom = resolveGeom(); build(newList, true); },
+    next(){ snapTo = Math.round(snapTo!=null?snapTo:pos)+1; vel=0; },
+    prev(){ snapTo = Math.round(snapTo!=null?snapTo:pos)-1; vel=0; },
+    goTo(i){ const base = Math.round((pos-i)/N())*N()+i; snapTo = base; vel=0; },
+    onFront(f){ onFrontCb.push(f); }, onCardClick(f){ onCardClick.push(f); }, onBgTap(f){ onBgTap.push(f); },
+    front(){ return frontIdx; },
+  };
+})();
+
+/* ============================================================
+   外殼 DOM 建構
+   ============================================================ */
+const root = document.getElementById('stage-root');
+root.innerHTML = `
+  <div class="spotlight" id="spotlight"></div>
+  <div class="cf-stage" id="cf-stage"><div class="cf-ring" id="cf-ring"></div></div>
+  <div class="vignette" id="vignette"></div>
+  <div class="grain" id="grain"></div>
+  <div class="lb-bar top" id="lbTop"></div><div class="lb-bar bot" id="lbBot"></div>
+
+  <div class="chrome" id="chrome">
+    <div class="wordmark" data-no-drag>光廊<span class="sub">CINEMA</span></div>
+    <div class="filter" id="filter" data-no-drag></div>
+    <div style="position:relative" data-no-drag>
+      <div class="avatar" id="avatar"></div>
+      <div class="menu account" id="accountMenu" style="display:none;top:40px;right:0"></div>
+    </div>
+  </div>
+
+  <div class="tweaks-fab" id="tweaksFab" data-no-drag title="Tweaks 調整">${icon('sliders',{size:16})}</div>
+
+  <div class="caption" id="caption" data-no-drag></div>
+
+  <div class="exit-imm" id="exitImm" data-no-drag>${icon('x',{size:15})}離開沉浸</div>
+
+  <div class="dock" id="dock" data-no-drag>
+    <div class="rbtn" id="btnPrev">${icon('chevL',{size:17})}</div>
+    <div class="rbtn big" id="btnPlay">${icon('pause',{size:22,stroke:1.9})}</div>
+    <div class="rbtn" id="btnNext">${icon('chevR',{size:17})}</div>
+    <div class="vsep"></div>
+    <div class="rbtn" id="btnThumbs">${icon('grid',{size:17})}</div>
+    <div style="position:relative">
+      <div class="rbtn" id="btnMore">${icon('more',{size:17})}</div>
+      <div class="menu tools" id="toolsMenu" style="display:none;bottom:52px;left:50%;transform:translateX(-50%)"></div>
+    </div>
+  </div>
+
+  <div class="scrub" id="scrub" data-no-drag><div class="hit" id="scrubHit"><div class="track"><div class="fill" id="scrubFill"></div></div></div></div>
+  <div class="thumbs" id="thumbs" data-no-drag></div>
+  <div class="hint" id="hint">DRAG · SCROLL · CLICK</div>
+
+  <div class="menu-sheet-mask" id="sheetMask"></div>
+
+  <div class="lightbox" id="lightbox">
+    <div class="lb-wrap" id="lbWrap">
+      <img class="lb-img" id="lbImg" alt="">
+      <div class="lb-info" id="lbInfo"></div>
+    </div>
+    <div class="lb-close" id="lbClose">${icon('x',{size:18})}</div>
+    <div class="lb-nav prev" id="lbPrev">${icon('chevL',{size:22})}</div>
+    <div class="lb-nav next" id="lbNext">${icon('chevR',{size:22})}</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="tweaks" id="tweaks">
+    <div class="tweaks-hd"><b>Tweaks</b><div class="x" id="tweaksClose">${icon('x',{size:16})}</div></div>
+    <div class="tweaks-body" id="tweaksBody"></div>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+`;
+
+// refs
+const $ = (id)=>document.getElementById(id);
+const els = {
+  spotlight:$('spotlight'), stage:$('cf-stage'), ring:$('cf-ring'), vignette:$('vignette'), grain:$('grain'),
+  lbTop:$('lbTop'), lbBot:$('lbBot'), chrome:$('chrome'), filter:$('filter'), avatar:$('avatar'),
+  accountMenu:$('accountMenu'), tweaksFab:$('tweaksFab'), caption:$('caption'), exitImm:$('exitImm'),
+  dock:$('dock'), btnPrev:$('btnPrev'), btnPlay:$('btnPlay'), btnNext:$('btnNext'), btnThumbs:$('btnThumbs'),
+  btnMore:$('btnMore'), toolsMenu:$('toolsMenu'), scrub:$('scrub'), scrubHit:$('scrubHit'), scrubFill:$('scrubFill'),
+  thumbs:$('thumbs'), hint:$('hint'), sheetMask:$('sheetMask'),
+  lightbox:$('lightbox'), lbWrap:$('lbWrap'), lbImg:$('lbImg'), lbInfo:$('lbInfo'), lbClose:$('lbClose'), lbPrev:$('lbPrev'), lbNext:$('lbNext'),
+  toast:$('toast'), tweaks:$('tweaks'), tweaksClose:$('tweaksClose'), tweaksBody:$('tweaksBody'), fileInput:$('fileInput'),
+};
+
+// 目前篩選後清單
+function curList(){ return state.filter==='全部' ? PHOTOS : PHOTOS.filter(p=>p.tag===state.filter); }
+function tags(){ return ['全部', ...Array.from(new Set(PHOTOS.map(p=>p.tag)))]; }
+function curPhoto(){ const l = curList(); return l[Math.min(state.front, l.length-1)] || l[0]; }
+
+/* ── 套用 tweaks（CSS 變數 + 各層）── */
+function applyTweaks(){
+  document.documentElement.style.setProperty('--cin-accent', tweaks.accent);
+  document.documentElement.style.setProperty('--cin-tone', TONES[tweaks.bgTone]||TONES.noir);
+  document.documentElement.style.setProperty('--title-font', tweaks.serifTitle ? 'var(--serif)' : "'Noto Sans TC', sans-serif");
+  els.vignette.style.display = tweaks.vignette ? 'block':'none';
+  let grain = tweaks.grain; if (isMobile) grain = Math.min(grain, 0.04); if (lowEnd) grain = 0;
+  els.grain.style.opacity = grain; els.grain.style.display = grain>0 ? 'block':'none';
+  const lbOn = tweaks.letterbox && !isMobile;
+  els.lbTop.style.display = lbOn?'block':'none'; els.lbBot.style.display = lbOn?'block':'none';
+  els.chrome.style.top = (isMobile ? '' : (lbOn? '44px':'26px'));
+  els.spotlight.style.background = `radial-gradient(62% 56% at 50% 41%, ${TONES[tweaks.bgTone]||TONES.noir} 0%, rgba(8,7,5,.35) 46%, #000 80%)`;
+}
+
+/* ── 篩選列 ── */
+function renderFilter(){
+  els.filter.innerHTML = tags().map(t=>`<div class="chip${t===state.filter?' on':''}" data-tag="${t}">${t}</div>`).join('');
+}
+els.filter.addEventListener('click',(e)=>{
+  const c = e.target.closest('.chip'); if(!c) return;
+  state.filter = c.dataset.tag; state.front = 0;
+  renderFilter(); CoverFlow.rebuild(curList()); updateCaption(); updateScrub(); renderThumbs();
+});
+
+/* ── 字幕 ── */
+function updateCaption(){
+  const p = curPhoto(); if(!p){ els.caption.innerHTML=''; return; }
+  els.caption.innerHTML =
+    `<div class="meta"><div class="bar"></div><div class="lbl">${p.tag} · № ${String(state.front+1).padStart(2,'0')}</div></div>`+
+    `<div class="title" style="animation:cinFade .5s ease">${p.title}</div>`+
+    `<div class="sub"><span>${p.date}</span>${p.cam?`<span class="cam">${p.cam}</span>`:''}</div>`;
+}
+
+/* ── 進度條 ── */
+function updateScrub(){
+  const l = curList(); els.scrubFill.style.width = (((state.front+1)/l.length)*100)+'%';
+}
+els.scrubHit.addEventListener('click',(e)=>{
+  const r = els.scrubHit.getBoundingClientRect();
+  const i = Math.round(((e.clientX-r.left)/r.width)*(curList().length-1));
+  CoverFlow.goTo(i);
+});
+
+/* ── 縮圖帶 ── */
+function renderThumbs(){
+  els.thumbs.innerHTML = curList().map((p,i)=>
+    `<div class="thumb${i===state.front?' cur':''}" data-i="${i}" style="background-image:url(${p.src})"></div>`).join('');
+}
+els.thumbs.addEventListener('click',(e)=>{ const t=e.target.closest('.thumb'); if(t) CoverFlow.goTo(+t.dataset.i); });
+function updateThumbsActive(){
+  [...els.thumbs.children].forEach((c,i)=>c.classList.toggle('cur', i===state.front));
+}
+
+/* ── dock 控制 ── */
+els.btnPrev.addEventListener('click', ()=>CoverFlow.prev());
+els.btnNext.addEventListener('click', ()=>CoverFlow.next());
+els.btnPlay.addEventListener('click', togglePlay);
+function togglePlay(){
+  state.playing = !state.playing;
+  els.btnPlay.innerHTML = icon(state.playing?'pause':'play',{size:22,stroke:1.9,fill:!state.playing});
+}
+els.btnThumbs.addEventListener('click', ()=>setThumbs(!state.thumbsOn));
+function setThumbs(on){
+  state.thumbsOn = on;
+  els.thumbs.classList.toggle('on', on);
+  els.btnThumbs.classList.toggle('on', on);
+  // 位移其他元件（讓出縮圖空間）
+  if (!isMobile){
+    els.caption.style.bottom = on? '246px':'132px';
+    els.dock.style.bottom = on? '122px':'46px';
+    els.scrub.style.bottom = on? '102px':'28px';
+  }
+}
+
+/* ── 選單（桌機 popover / 手機 bottom sheet）── */
+function menuItem(ic,label,opt){ opt=opt||{};
+  return `<div class="menu-item${opt.danger?' danger':''}" data-act="${opt.act||''}">${icon(ic,{size:17})}<span class="lbl">${label}</span>${opt.active?'<span class="dot"></span>':''}</div>`;
+}
+function buildAccountMenu(){
+  els.accountMenu.innerHTML =
+    menuItem('user','登入 Google',{act:'login'})+
+    `<div class="menu-sep"></div>`+
+    menuItem('cloud','同步雲端',{act:'sync'})+
+    menuItem('cloudDown','從雲端還原',{act:'restore'})+
+    `<div class="menu-sep"></div>`+
+    menuItem('trash','全部刪除',{act:'delAll',danger:true})+
+    menuItem('logout','登出',{act:'logout'});
+}
+function buildToolsMenu(){
+  els.toolsMenu.innerHTML =
+    menuItem('upload','上傳圖片',{act:'upload'})+
+    `<div class="menu-sep"></div>`+
+    menuItem('grid','縮圖帶',{act:'thumbs',active:state.thumbsOn})+
+    menuItem('edit','編輯排序',{act:'edit'})+
+    menuItem('tag','標籤管理',{act:'tagmgr'})+
+    menuItem('layers','沉浸模式',{act:'immersive',active:state.immersive})+
+    `<div class="menu-sep"></div>`+
+    menuItem('globe','公開相簿',{act:'public',active:state._public})+
+    menuItem('share','分享連結',{act:'share'});
+}
+state._public = true;
+
+function openMenu(which){
+  closeMenus();
+  const menu = which==='account'?els.accountMenu:els.toolsMenu;
+  if (which==='account') buildAccountMenu(); else buildToolsMenu();
+  if (isMobile){
+    menu.classList.add('sheet'); els.sheetMask.classList.add('on');
+  } else {
+    menu.classList.remove('sheet');
+  }
+  menu.style.display = 'block';
+  menu._open = true;
+}
+function closeMenus(){
+  [els.accountMenu, els.toolsMenu].forEach(m=>{ m.style.display='none'; m._open=false; m.classList.remove('sheet'); });
+  els.sheetMask.classList.remove('on');
+}
+els.avatar.addEventListener('click',(e)=>{ e.stopPropagation(); els.accountMenu._open?closeMenus():openMenu('account'); });
+els.btnMore.addEventListener('click',(e)=>{ e.stopPropagation(); els.toolsMenu._open?closeMenus():openMenu('tools'); els.btnMore.classList.toggle('on', els.toolsMenu._open); });
+els.sheetMask.addEventListener('click', closeMenus);
+root.addEventListener('click', (e)=>{ if(!e.target.closest('.menu')&&!e.target.closest('#avatar')&&!e.target.closest('#btnMore')) closeMenus(); });
+
+// 選單動作
+els.accountMenu.addEventListener('click', menuAction);
+els.toolsMenu.addEventListener('click', menuAction);
+function menuAction(e){
+  const it = e.target.closest('.menu-item'); if(!it) return;
+  const act = it.dataset.act;
+  switch(act){
+    case 'login': flash('（示意）Google 登入'); break;
+    case 'sync': flash('開始同步…'); break;
+    case 'restore': flash('從雲端還原…'); break;
+    case 'delAll': flash('（示意）需二次確認'); break;
+    case 'logout': flash('已登出'); break;
+    case 'upload': els.fileInput.click(); break;
+    case 'thumbs': setThumbs(!state.thumbsOn); buildToolsMenu(); return;
+    case 'edit': flash('（示意）編輯排序模式'); break;
+    case 'tagmgr': flash('（示意）標籤管理'); break;
+    case 'immersive': setImmersive(true); break;
+    case 'public': state._public=!state._public; flash(state._public?'已設為公開':'已設為私人'); buildToolsMenu(); return;
+    case 'share': navigator.clipboard?.writeText(location.href).then(()=>flash('連結已複製！'),()=>flash('連結已複製！')); break;
+  }
+  closeMenus(); els.btnMore.classList.remove('on');
+}
+
+/* ── 沉浸模式 ── */
+function setImmersive(on){
+  state.immersive = on;
+  document.body.classList.toggle('immersive', on);
+  const hide = on?'none':'';
+  els.chrome.style.display = hide; els.caption.style.display = hide;
+  els.scrub.style.display = hide; els.hint.style.display = on?'none':(isMobile?'none':'');
+  els.tweaksFab.style.display = hide;
+  els.exitImm.style.display = on?'flex':'none';
+  if (on && state.thumbsOn) setThumbs(false);
+  CoverFlow.rebuild(curList()); updateCaption(); updateScrub(); renderThumbs();
+}
+els.exitImm.addEventListener('click', ()=>setImmersive(false));
+
+/* ── 燈箱 ── */
+function openLightbox(i){
+  state.lb = i; renderLightbox(); els.lightbox.classList.add('on');
+}
+function closeLightbox(){ state.lb=null; els.lightbox.classList.remove('on'); }
+function lbStep(dir){
+  const l = curList(); state.lb = (state.lb+dir+l.length)%l.length; renderLightbox();
+}
+function renderLightbox(){
+  const l = curList(), p = l[state.lb]; if(!p) return;
+  els.lbImg.src = p.src;
+  els.lbInfo.innerHTML =
+    `<div class="t">${p.title}</div>`+
+    `<div class="s"><span class="tag">${p.tag}</span><span>${p.date}</span><span class="idx">${String(state.lb+1).padStart(2,'0')} / ${l.length}</span></div>`;
+}
+els.lbClose.addEventListener('click', closeLightbox);
+els.lbPrev.addEventListener('click',(e)=>{e.stopPropagation();lbStep(-1);});
+els.lbNext.addEventListener('click',(e)=>{e.stopPropagation();lbStep(1);});
+els.lightbox.addEventListener('click',(e)=>{ if(e.target===els.lightbox) closeLightbox(); });
+window.addEventListener('keydown',(e)=>{
+  if (state.lb==null) return;
+  if (e.key==='Escape') closeLightbox();
+  else if (e.key==='ArrowLeft') lbStep(-1);
+  else if (e.key==='ArrowRight') lbStep(1);
+});
+// 燈箱手機左右滑動換張
+let lbTouchX = 0;
+els.lbWrap.addEventListener('touchstart',(e)=>{ lbTouchX = e.touches[0].clientX; },{passive:true});
+els.lbWrap.addEventListener('touchend',(e)=>{
+  const dx = e.changedTouches[0].clientX - lbTouchX;
+  if (Math.abs(dx)>50) lbStep(dx<0?1:-1);
+},{passive:true});
+
+/* ── toast ── */
+let toastT = null;
+function flash(msg){
+  els.toast.textContent = msg; els.toast.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>els.toast.classList.remove('on'), 1900);
+}
+
+/* ── 上傳（FileReader）── */
+els.fileInput.addEventListener('change',(e)=>{
+  const files = [...e.target.files]; if(!files.length) return;
+  let pending = files.length; const added = [];
+  files.forEach((f,i)=>{
+    const r = new FileReader();
+    r.onload = ()=>{
+      added.push({id:'u'+Date.now()+i, src:r.result, title:f.name.replace(/\.[^.]+$/,''),
+        date:new Date(f.lastModified).toISOString().slice(0,10).replace(/-/g,'.'),
+        tag: state.filter==='全部'?'風景':state.filter, cam:''});
+      if(--pending===0){ PHOTOS = [...added,...PHOTOS]; state.front=0;
+        renderFilter(); CoverFlow.rebuild(curList()); updateCaption(); updateScrub(); renderThumbs();
+        flash(`已加入 ${added.length} 張作品`); }
+    };
+    r.readAsDataURL(f);
+  });
+  e.target.value = '';
+});
+
+/* ── 背景輕觸切換播放 / 正面卡開燈箱 ── */
+CoverFlow.onFront((fi)=>{ state.front = fi; updateCaption(); updateScrub(); updateThumbsActive(); });
+CoverFlow.onCardClick((i)=> openLightbox(i));
+CoverFlow.onBgTap(()=> togglePlay());
+
+/* ── Tweaks 面板 ── */
+function renderTweaks(){
+  const seg = (label,val,opts,key,fmt)=>{
+    const btns = opts.map(o=>`<button data-k="${key}" data-v="${o}" class="${(fmt?fmt(o):o)===val||o===val?'on':''}">${fmt?fmt(o):o}</button>`).join('');
+    return `<div class="tw-row"><div class="tw-lbl"><span>${label}</span></div><div class="tw-seg">${btns}</div></div>`;
+  };
+  const sw = (label,val,opts,key)=>{
+    const s = opts.map(o=>`<div class="tw-sw${o===val?' on':''}" data-k="${key}" data-v="${o}" style="background:${o}"></div>`).join('');
+    return `<div class="tw-row"><div class="tw-lbl"><span>${label}</span></div><div class="tw-swatches">${s}</div></div>`;
+  };
+  const range = (label,val,min,max,step,key)=>
+    `<div class="tw-row"><div class="tw-lbl"><span>${label}</span><span class="v">${(+val).toFixed(2)}</span></div>`+
+    `<input type="range" class="tw-range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+  const toggle = (label,val,key)=>
+    `<div class="tw-row h"><div class="tw-lbl"><span>${label}</span></div><button class="tw-toggle${val?' on':''}" data-k="${key}"><i></i></button></div>`;
+
+  els.tweaksBody.innerHTML =
+    `<div class="tw-sect">氛圍</div>`+
+    sw('主色調', tweaks.accent, ACCENTS, 'accent')+
+    seg('背景色調', tweaks.bgTone, Object.keys(TONES), 'bgTone', (k)=>TONE_LABELS[k])+
+    range('底片噪點', tweaks.grain, 0, 0.14, 0.01, 'grain')+
+    toggle('暗角', tweaks.vignette, 'vignette')+
+    toggle('Letterbox 黑邊', tweaks.letterbox, 'letterbox')+
+    `<div class="tw-sect">舞台</div>`+
+    seg('尺寸情境', tweaks.size, Object.keys(SIZES), 'size')+
+    toggle('地板倒影', tweaks.reflection, 'reflection')+
+    range('自轉速度', tweaks.autoSpeed, 0, 0.4, 0.02, 'autoSpeed')+
+    `<div class="tw-sect">字體</div>`+
+    seg('標題字體', tweaks.serifTitle?'襯線':'黑體', ['襯線','黑體'], 'serifTitle');
+}
+function setTweak(key,val){
+  if (key==='serifTitle') val = (val==='襯線');
+  if (key==='grain'||key==='autoSpeed') val = +val;
+  tweaks[key] = val; saveTweaks(); applyTweaks();
+  // 需重建舞台的：size / reflection
+  if (key==='size'||key==='reflection'){ CoverFlow.rebuild(curList()); updateCaption(); updateScrub(); renderThumbs(); }
+  else { CoverFlow.paint(true); }
+  renderTweaks();
+}
+els.tweaksBody.addEventListener('click',(e)=>{
+  const b = e.target.closest('[data-k]'); if(!b || b.tagName==='INPUT') return;
+  if (b.classList.contains('tw-toggle')){ setTweak(b.dataset.k, !tweaks[b.dataset.k]); return; }
+  if (b.dataset.v!=null) setTweak(b.dataset.k, b.dataset.v);
+});
+els.tweaksBody.addEventListener('input',(e)=>{
+  const r = e.target.closest('input[type=range]'); if(!r) return;
+  setTweak(r.dataset.k, r.value);
+});
+els.tweaksFab.addEventListener('click',(e)=>{ e.stopPropagation(); els.tweaks.classList.add('on'); });
+els.tweaksClose.addEventListener('click',()=>els.tweaks.classList.remove('on'));
+
+/* ── Page Visibility（背景暫停 RAF）── */
+document.addEventListener('visibilitychange',()=>{
+  if (document.hidden) CoverFlow.stop(); else CoverFlow.start();
+});
+/* ── 螢幕旋轉 / resize → 重算手機幾何 ── */
+let rsT;
+window.addEventListener('resize',()=>{ clearTimeout(rsT); rsT=setTimeout(()=>{
+  CoverFlow.refreshGeom(curList());
+},250); });
+
+/* ============================================================
+   啟動
+   ============================================================ */
+CoverFlow.init(els.stage, els.ring);
+els.avatar.style.backgroundImage = `url(${U('1469474968028-56623f02e42e',200)})`;  // 示意頭像
+applyTweaks();
+renderFilter();
+renderTweaks();
+CoverFlow.build(curList(), false);
+CoverFlow.start();
+updateCaption();
+updateScrub();
+renderThumbs();
+// 初始 dock 圖示（暫停中＝播放圖示 fill 由 playing 控制）
+els.btnPlay.innerHTML = icon(state.playing?'pause':'play',{size:22,stroke:1.9,fill:!state.playing});
+
+})();
+</script>
+</body>
+</html>
