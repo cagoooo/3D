@@ -2269,6 +2269,11 @@
         .tag-manage-close:hover {
             background: rgba(255, 255, 255, .12);
         }
+        /* CD：尊重系統「減少動態」設定 — 關閉卡片過場與入場動畫（對前庭敏感 / 動暈使用者友善） */
+        @media (prefers-reduced-motion: reduce) {
+            .carousel-item, .carousel, .carousel-item-inner { transition: none !important; }
+            .entering-wave { animation: none !important; }
+        }
     </style>
 
 </head>
@@ -2706,6 +2711,8 @@
         let _perfTier = _lowEnd ? 1 : 0;
         let _perfProbeActive = true;       // 啟動期 FPS 採樣旗標，偵測穩定後關閉
         let _fpsFrames = 0, _fpsT0 = 0;
+        // CD：prefers-reduced-motion → 不自動旋轉（保留手動拖曳，使用者主動觸發的動態可接受）
+        if (_reduceMotion) { autoRotateBase = 0; autoRotateSpeed = 0; isAutoRotating = false; }
         let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
         let lbCurrentIndex = 0, lbOpen = false;
 
@@ -3552,7 +3559,7 @@
             // 分批參數：前 N 張同步建構（首屏可見），其餘分批補建
             const FIRST_BATCH = Math.min(numImages, 12);
             // 手機用 6（每批更輕量，主執行緒空閒更多），桌機用 20（減少 idle callback 次數，50 張只需 3 批）
-            const CHUNK_SIZE = _isMobileDevice ? 6 : 20;
+            const CHUNK_SIZE = _lowEnd ? 4 : (_isMobileDevice ? 6 : 20); // CC：低端裝置每批 DOM 插入更少
 
             // 建立單張卡片 DOM 的工廠函數
             function buildCard(i, useLazy) {
@@ -3564,7 +3571,7 @@
                 inner.className = 'carousel-item-inner';
                 // 手機端 idle 補建批次跳過 entering-wave：
                 // filter:blur(4px) 在多張同時動畫時消耗大量 GPU；後排卡片使用者看不到，動畫無意義
-                if (!useLazy || !_isMobileDevice) {
+                if ((!useLazy || !_isMobileDevice) && !_reduceMotion) {
                     inner.classList.add('entering-wave');
                     inner.style.animationDelay = `${Math.min(i, FIRST_BATCH - 1) * 0.05}s`;
                 }
@@ -3955,6 +3962,20 @@
         // card-focused 快取：避免每幀對全部卡片做 classList.toggle
         let _prevFrontCardEl = null;
 
+        // ── CB：FPS 實測動態降級 ── 掛在 applyTransform（有動畫才跑）採樣，連續低 FPS 才降級，穩定後自停
+        function _perfSample() {
+            const now = performance.now();
+            if (!_fpsT0) { _fpsT0 = now; _fpsFrames = 0; return; }
+            _fpsFrames++;
+            const dt = now - _fpsT0;
+            if (dt >= 1500) {                                  // 每 1.5s 評估一次
+                const fps = _fpsFrames * 1000 / dt;
+                if (fps < 40 && _perfTier < 2) _perfTier++;    // 偏卡 → 再降一級
+                if (fps >= 50 || _perfTier >= 2) _perfProbeActive = false; // 夠順或已降到底 → 停止採樣
+                _fpsT0 = now; _fpsFrames = 0;
+            }
+        }
+
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
             const pX = isDragging ? 0 : parallaxX;
@@ -3963,8 +3984,12 @@
 
             // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
             // 手機版跳幀：光照計算每 2 幀才跑一次，大幅降低每秒 DOM 操作次數
-            if (_isMobileDevice) {
-                _lightingFrameCounter = (_lightingFrameCounter + 1) % 2;
+            // CB：FPS 採樣（啟動期偵測裝置實際算力，穩定後自動停止）
+            if (_perfProbeActive) _perfSample();
+            // 光照跳幀：手機每 2 幀；偵測為低階(tier≥2)加大到每 3 幀；桌機僅 tier≥1（偵測掉幀後）才開始跳幀
+            const _skip = _isMobileDevice ? (_perfTier >= 2 ? 3 : 2) : (_perfTier >= 1 ? 2 : 1);
+            if (_skip > 1) {
+                _lightingFrameCounter = (_lightingFrameCounter + 1) % _skip;
                 if (_lightingFrameCounter !== 0) return;
             }
             // AZ: lightAngle 光源角度偏移（0=正前方光，90=右側光）
@@ -4819,7 +4844,7 @@
             particleCanvas.style.display = 'none';
         }
         const pCtx = _isMobileDevice ? null : particleCanvas.getContext('2d');
-        const PARTICLE_COUNT = _isMobileDevice ? 0 : 80;
+        const PARTICLE_COUNT = (_isMobileDevice || _lowEnd) ? 0 : 80; // CC：低端桌機（記憶體/核心數少）也關粒子
         const _PARTICLE_FRAME_MS = 0; // 桌機維持 60fps（手機不跑，此值無用）
         let _lastParticleFrameTs = 0;
         let particles = [];
@@ -4852,6 +4877,7 @@
         let _particleRafId = null;
         function animateParticles(ts) {
             if (_isMobileDevice) { _particleRafId = null; return; } // 手機不跑
+            if (_perfTier >= 1) { _particleRafId = null; return; }  // CB/CC：偵測低 FPS 或低端桌機 → 關粒子省 CPU
             // 頁面隱藏時停止動畫（省電，避免背景空轉）
             if (document.hidden) { _particleRafId = null; return; }
             if (_PARTICLE_FRAME_MS > 0 && ts - _lastParticleFrameTs < _PARTICLE_FRAME_MS) {
