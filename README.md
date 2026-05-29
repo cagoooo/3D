@@ -231,9 +231,9 @@ https://你的帳號.github.io/3d-gallery/
 ---
 
 
-## ✅ 已完成進度總表（v9.11 截止）
+## ✅ 已完成進度總表（v9.12 截止）
 
-> 最後更新：2026-03-24（v9.11 拖曳方向修正 + AG1 動態透視動畫）
+> 最後更新：2026-05-29（v9.12 分享相簿手機旋轉速度動態自適應 + 速度 cap 同步化）
 
 ---
 
@@ -320,7 +320,7 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **🖐️ 支援手勢恢復旋轉**：全螢幕下，手動滑動旋轉畫廊後，無須點擊會自動順著手勢方向繼續自轉。
 - [x] **🖱️ 支援點擊暫停**：輕點背景空白處，即可隨時中斷自動旋轉。
 
-### 🚀 v9.2：手機端效能全面優化（最新完成）
+### 🚀 v9.2：手機端效能全面優化
 - [x] **粒子數量自適應**：手機自動降為 30 顆（桌機維持 80 顆），CPU 運算量降低 62%。
 - [x] **粒子動畫限速 30fps**：手機版 RAF 觸發頻率從 60fps 降至 30fps，粒子動畫對 CPU 的占用減半。
 - [x] **光照計算跳幀**：手機版 `applyTransform()` 光照/陰影 DOM 操作每 2 幀才執行一次，卡片 style 更新量減半。
@@ -330,7 +330,24 @@ https://你的帳號.github.io/3d-gallery/
 - [x] **主題色快取**：粒子動畫不再每幀查詢 `data-theme` 屬性，改用快取變數，主題切換時才刷新。
 - [x] **Page Visibility API**：鎖屏、切換分頁時自動暫停所有 RAF 動畫，頁面恢復後重啟，消除背景空轉耗電。
 
-### 🎯 v9.11：分享相簿互動體驗精修（最新完成）
+### 🎯 v9.12：分享相簿手機旋轉速度動態自適應（最新完成）
+
+> 最後更新：2026-05-29（依環形投影半徑反推速度上限 + 速度 cap 同步化，2 個 commit）
+
+**問題根源——為何「分享相簿在手機上，相簿越大越會飛」：**
+- [x] **環形半徑放大效應定位**：3D 旋轉木馬的環形半徑 `R` 由張數決定，43 張相簿經透視投影後的有效半徑 `R_proj ≈ 3149px`。固定 0.25°/幀的角速度，在大半徑下換算成前排卡片的「視覺線速度」高達 **780px/秒（每秒橫掃 2 個螢幕寬）**，肉眼追不上；touchSens 同理，大相簿手指輕輕一撥就失控飛轉。先前 v9.6 / v9.9 的「固定上限」治標不治本，因為完全沒把「半徑」這個變數算進去。
+
+**動態速度上限公式（`_readonlyZoomInAnimation()`）：**
+- [x] **autoRotate 角速度反推**：以「前排卡片視覺速度 ≤ 螢幕寬 60%/秒」為目標，反推所需角速度 `_maxOmegaDeg = (innerWidth × 0.6 / 60) / (R_proj × π/180)`，對 `autoRotateBase` / `autoRotateSpeed` 取 `Math.min`，再加硬上限 0.25°/幀。43 張相簿自動從 0.25 收斂到 **0.07°/幀**。
+- [x] **touchSens 手感反推**：令「1px 手指滑動 ≈ 3px 前排卡片視覺位移」這個自然手感比例，反推 `touchSens_ideal = 3 / (0.4 × R_proj × π/180)`，並夾在 0.05～0.5 之間。43 張相簿自動從 0.5 收斂到 **0.14**。
+- [x] **小相簿零影響**：8 張等小相簿 `R_proj` 小、反推值大，被 0.5 / 0.25 硬上限擋住而維持原本靈敏手感；只有大相簿才真正減速，做到「該慢的慢、該快的快」。
+
+**速度 cap 同步化——修正「偶發 cap 沒生效」：**
+- [x] **移出 RAF else block，改函式開頭同步套用**：舊版速度上限寫在 1800ms 進場動畫 RAF 迴圈的 `else`（動畫跑完才執行）裡。若使用者進場瞬間頁面剛好 hidden（Page Visibility API 已暫停 RAF）或 RAF 被延遲，cap 根本不會套用 → 偶發「分享相簿還是飛快」。新版改在 `_readonlyZoomInAnimation()` 函式開頭**同步計算並立即套用**，RAF 只負責視覺推近效果，速度 cap 不再依賴 RAF 是否完成。
+
+---
+
+### 🎯 v9.11：分享相簿互動體驗精修
 
 > 最後更新：2026-03-24
 
@@ -434,11 +451,12 @@ https://你的帳號.github.io/3d-gallery/
 
 ---
 
-### AG2. 分享相簿手機端「輕觸暫停 / 再輕觸繼續」旋轉
+### ~~AG2. 分享相簿手機端「輕觸暫停 / 再輕觸繼續」旋轉~~ ✅ 核心已完成
 
 > **難度**：⭐｜**效益**：手機觀看者常常只想看一張圖，輕觸暫停比滑動更直覺
 
-目前觸碰就開始拖曳（`handleDragStart`），沒有簡單的「點一下暫停/繼續」：
+✅ **核心已實作**（`handleDragEnd`，`index.html` 約 4076 行）：唯讀模式下 `dist < 5` 判定為點擊，點背景即 toggle `isAutoRotating` → `startAutoRotate()` / `stopAutoRotate()`，與桌機一致。
+> 可選增強（尚未做）：補上 `showBanner('▶ 旋轉中' / '⏸ 已暫停')` 視覺提示與 `navigator.vibrate()` 觸覺回饋（見 BK / CE）。原始示意如下：
 
 ```js
 // handleDragEnd：dist < 5px 判定為點擊
@@ -1171,7 +1189,7 @@ src/
 | v6.0 | E F G H I | 拖曳 / 行內編輯 / 壓縮 / 批次 / 標籤 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v7.0 | U W Y AA | 版型 / 波浪 / 公開連結 / 公開規則 | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
 | v8.0 | — | 自動還原 + 手動還原 + 一鍵刪除 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ✅ 已完成 |
-| **v8.1** | **—** | **多排圓圈 + 深度暗化 + 沉浸模式** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 最新完成** |
+| **v8.1** | **—** | **多排圓圈 + 深度暗化 + 沉浸模式** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
 | **v9.0** | **AB** | **EXIF 自動日期 / 相機** | **⭐⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
 | **v9.0** | **AC** | **即時關鍵字搜尋** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
 | **v9.0** | **AD** | **幻燈片播放模式** | **⭐⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
@@ -1211,11 +1229,12 @@ src/
 | **v9.11** | **AG1** | **分享相簿動態透視入場動畫（自適應張數）** | **⭐⭐** | **⭐⭐⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
 | **v9.11** | **—** | **控制面板 preserve-3d 穿透修正（三層防護）** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
 | **v9.11** | **—** | **拖曳方向判斷修正（totalDx 防手抖）** | **⭐** | **⭐** | **⭐⭐⭐⭐** | **✅ 已完成** |
-| **v9.12** | **BG** | **img.decode() 非同步解碼防主執行緒阻塞** | **⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
-| **v9.12** | **BH** | **IndexedDB 取代 localStorage（突破 5MB 限制）** | **⭐⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
-| **v9.12** | **BI** | **分享相簿觀看次數統計** | **⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
-| **v9.12** | **BJ** | **QR Code 一鍵產生分享** | **⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
-| **v9.12** | **BK** | **AG2 手機端輕觸暫停/繼續旋轉** | **⭐** | **⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.12** | **—** | **分享相簿手機旋轉速度動態自適應（依 R_proj 反推 + cap 同步化）** | **⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **✅ 已完成** |
+| **v9.13** | **BG** | **img.decode() 非同步解碼防主執行緒阻塞** | **⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.13** | **BH** | **IndexedDB 取代 localStorage（突破 5MB 限制）** | **⭐⭐⭐** | **⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.13** | **BI** | **分享相簿觀看次數統計** | **⭐⭐** | **⭐⭐** | **⭐⭐⭐⭐** | **🔥 最優先** |
+| **v9.13** | **BJ** | **QR Code 一鍵產生分享** | **⭐** | **⭐⭐⭐** | **⭐⭐⭐⭐⭐** | **🔥 最優先** |
+| ~~v9.13~~ | **BK** | **AG2 手機端輕觸暫停/繼續旋轉（核心）** | **⭐** | **⭐** | **⭐⭐⭐⭐** | **✅ 核心已完成** |
 | v9.x | AB | EXIF 自動日期 / 相機型號 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
 | v9.x | AC | 即時關鍵字搜尋 | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | 📝 推薦 |
 | v9.x | AD | 幻燈片播放模式 | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 📝 推薦 |
@@ -1427,9 +1446,10 @@ card.addEventListener('mouseleave', () => {
 
 ---
 
-## 🆕 v9.12 立即可做（從 v9.10/v9.11 延伸的精準小優化）
+## 🆕 v9.13 立即可做（從 v9.10/v9.11 延伸的精準小優化）
 
 > 每項均可獨立實作，互不依賴，適合逐項完成再部署。
+> （原列為 v9.12，因 v9.12 已由「分享相簿手機旋轉速度動態自適應」實際佔用，本批順移為 v9.13。）
 
 ---
 
@@ -1535,9 +1555,11 @@ async function showQRCode(url) {
 
 ---
 
-### BK. 手機端輕觸暫停 / 再輕觸繼續旋轉（AG2 實作）
+### ~~BK. 手機端輕觸暫停 / 再輕觸繼續旋轉（AG2 實作）~~ ✅ 核心已完成（剩 banner / haptic 提示）
 
 > **難度**：⭐｜**效益**：手機觀看者最直覺的操作，比找暫停按鈕快得多
+>
+> ✅ 點背景 toggle 旋轉的核心邏輯已在 `handleDragEnd`（約 4076 行）實作；下方示意多出的 `showBanner` 視覺提示尚未補上，屬可選增強。
 
 ```js
 // handleDragEnd 最後加入（dist = 拖曳總距離）
@@ -1727,6 +1749,263 @@ function getCdnUrl(originalUrl, widthPx) {
 > **難度**：⭐⭐⭐｜**效益**：LINE / Facebook 預覽顯示封面圖 + 標題，點擊率提升 3-5 倍
 
 透過 Firebase Functions SSR，在 `</head>` 前注入 `og:title`、`og:image`、`og:description`、`twitter:card` 標籤，其餘 SPA 行為不受影響。
+
+---
+
+## 🆕 v9.14 路線圖：動態速度上限系統「完整化」+ 效能自適應
+
+> 本批建議**直接延續 v9.12「分享相簿手機旋轉速度動態自適應」**。v9.12 已讓「自動旋轉初速」依環形投影半徑 `R_proj` 收斂，但這套系統還有幾個**未閉環的缺口**——`_maxOmegaDeg` 只在 `_readonlyZoomInAnimation()` 進場時算一次、只套到 `autoRotateBase / autoRotateSpeed / touchSens`，一旦使用者**手動互動**或**改變視窗 / 視角**就會被繞過。以下按「① 速度系統閉環 → ② 效能/裝置自適應 → ③ 觀看體驗」三組排列，每項附**與 v9.12 的關係**、程式碼示意與效益。
+
+---
+
+### 🔧 第一組：動態速度上限系統「閉環」（直接補 v9.12 缺口）
+
+#### BW. 慣性甩動 / 放手初速也納入動態上限（最關鍵缺口）
+
+> **難度**：⭐⭐｜**效益**：堵住 v9.12 最大破口——大相簿「一甩就飛」
+
+**問題**（已對照程式碼確認）：v9.12 的 cap 沒套到手動甩動路徑——
+- `handleDragEnd`（約 4107 行）放手後重設 `autoRotateSpeed = gestureDir × Math.max(autoRotateBase, Math.min(1.5, gestureSpd×0.32))`，**固定上限 1.5°/幀**；
+- 慣性 `velocityX` 在手機端仍是 v9.6 的**固定** `±5°/幀`（約 4059 行）。
+
+在 43 張相簿（`R_proj ≈ 3149px`）下，5°/幀 ≈ **16500px/秒**，等於使用者輕輕一甩就突破了 v9.12 剛建立的「螢幕寬 60%/秒」上限，前功盡棄。
+
+**解法**：把 v9.12 的 `_maxOmegaDeg` 從區域 `const` 提升為模組層級變數 `_readonlyMaxOmega`，在這兩處取代固定值：
+
+```js
+// _readonlyZoomInAnimation() 內算完後存起來
+_readonlyMaxOmega = _isMobileDevice ? _maxOmegaDeg : Infinity;
+
+// 約 4059 行：手機慣性上限改用動態值
+if (_isMobileDevice && isTouch) {
+    const cap = _readonlyMaxOmega ?? 5;
+    velocityX = Math.max(-cap, Math.min(cap, velocityX));
+}
+
+// 約 4107 行：放手初速上限也收斂
+const _spdCap = Math.min(1.5, _readonlyMaxOmega ?? 1.5);
+autoRotateSpeed = gestureDir * Math.max(autoRotateBase, Math.min(_spdCap, gestureSpd * 0.32));
+```
+
+> 一般（非唯讀）模式 `_readonlyMaxOmega = Infinity`，行為完全不變，零風險。**這是本批最該先做的一項。**
+
+---
+
+#### BX. 螢幕旋轉 / 視窗縮放後重算速度上限
+
+> **難度**：⭐｜**效益**：手機直↔橫旋轉後，速度感維持一致
+
+v9.12 用 `window.innerWidth × 0.6 / 60` 當「目標視覺速度」，進場時只算一次。手機**轉成橫向**後 `innerWidth` 從 ~390 變 ~844，但 cap 不會更新 → 橫向時前排卡片視覺速度幾乎翻倍。
+
+```js
+let _resizeT;
+window.addEventListener('resize', () => {
+    if (!_isReadonlyMode || !_isMobileDevice) return;
+    clearTimeout(_resizeT);
+    _resizeT = setTimeout(_recomputeSpeedCap, 200); // debounce
+}, { passive: true });
+```
+
+把 v9.12 的反推邏輯抽成 `_recomputeSpeedCap()`，`resize` / `orientationchange` 共用。
+
+---
+
+#### BY. 縮放（pinch / 滾輪）後重算速度上限
+
+> **難度**：⭐⭐｜**效益**：縮放改變 `R_proj`，速度上限須同步跟進
+
+v9.12 的 `R_proj = _R × END / (END − _R)` 依賴進場時固定的 `END`（perspective）。若使用者 pinch **拉近**（perspective 變小），`R_proj` 變大 → 視覺速度回升。應在 pinch / wheel 縮放結束後，用**當前** `perspective` 重新計算：
+
+```js
+function _recomputeSpeedCap() {
+    const persp = perspective; // 當前實際視角
+    const Rproj = persp > _R ? _R * persp / (persp - _R) : _R * 3;
+    const maxOmega = Math.min(0.25, (window.innerWidth * 0.6 / 60) / (Rproj * Math.PI / 180));
+    _readonlyMaxOmega = _isMobileDevice ? maxOmega : Infinity;
+    autoRotateBase  = Math.min(autoRotateBase, maxOmega);
+    autoRotateSpeed = Math.min(Math.abs(autoRotateSpeed), maxOmega) * Math.sign(autoRotateSpeed || 1);
+    layoutCfg.touchSens = Math.max(0.05,
+        Math.min(layoutCfg.touchSens ?? 0.5, Math.min(0.5, 3 / (0.4 * Rproj * Math.PI / 180))));
+}
+```
+
+> BW / BX / BY 全部共用此函式，v9.12 進場時也改呼叫它 → 三處邏輯收斂成**單一真相來源**，避免公式散落多份難以維護。
+
+---
+
+#### BZ. 多排相簿取「最外排半徑」計算上限
+
+> **難度**：⭐⭐｜**效益**：80+ 張多排相簿，最外排不再飛快
+
+v8.1 起 80 張以上會自動分多排，各排環形半徑不同（`rInRow` 依該排張數計算）。v9.12 的 `_R` 只取了單一排半徑；多排時**最外排半徑最大、視覺最快**。應改取所有排中的最大 `R` 來反推上限：
+
+```js
+// buildGallery 時記錄每排半徑，取最大
+const _Rmax = Math.max(...rowRadii); // rowRadii: 各排 rInRow 陣列
+// _recomputeSpeedCap 中以 _Rmax 取代 _R
+```
+
+---
+
+#### CA. 進場 1800ms 動畫期間鎖定拖曳干擾
+
+> **難度**：⭐｜**效益**：消除「進場推近」與「使用者拖曳」打架的視覺跳動
+
+v9.11 的 AG1 進場動畫推進 `perspective`（1800ms）。期間若使用者就開始拖曳，`applyTransform` 的 perspective 會與動畫 RAF 互相覆寫，畫面抖動。進場期間先擋住拖曳起手：
+
+```js
+let _introLocked = false;
+// _readonlyZoomInAnimation 開頭：_introLocked = true;
+// RAF 結束（p >= 1）時：_introLocked = false;
+// handleDragStart 開頭：if (_introLocked) return;
+```
+
+> 可搭配 0.3s 淡入提示「↻ 進場中…」，動畫結束自動消失。
+
+---
+
+### ⚡ 第二組：效能與裝置自適應（延續 v9.2 / v9.8 / v9.10 手機效能主線）
+
+#### CB. 即時 FPS 偵測 → 動態降級
+
+> **難度**：⭐⭐⭐｜**效益**：低階機自動再減負、高階機維持滿配，不再「一刀切看是不是手機」
+
+目前降級策略以 `_isMobileDevice` 二分。改為實測 FPS，連續低於門檻就再降一級（關陰影 → 關粒子 → 拉長跳幀）：
+
+```js
+let _frames = 0, _fpsT0 = performance.now(), _perfTier = 0;
+function _fpsProbe(now) {
+    _frames++;
+    if (now - _fpsT0 >= 1000) {
+        const fps = _frames * 1000 / (now - _fpsT0);
+        if (fps < 40 && _perfTier < 2) { _perfTier++; _applyPerfTier(_perfTier); }
+        _frames = 0; _fpsT0 = now;
+    }
+    requestAnimationFrame(_fpsProbe);
+}
+// _applyPerfTier(1): 關 box-shadow 動畫；(2): 關粒子 + 光照改每 3 幀
+```
+
+> 與 v9.3 的「亮度閾值跳幀」「背向卡片靜態化」協同，形成「靜態優化 + 動態偵測」雙層保險。
+
+---
+
+#### CC. 低端裝置預判降級（deviceMemory / hardwareConcurrency）
+
+> **難度**：⭐⭐｜**效益**：第一幀就用對的配置，不必等 CB 偵測掉幀才降
+
+```js
+const _lowEnd = (navigator.deviceMemory && navigator.deviceMemory <= 4)
+             || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+if (_lowEnd) {
+    PARTICLE_COUNT = 0;   // 直接不啟動粒子
+    CHUNK_SIZE = 4;       // 每批 DOM 插入更少
+    _perfTier = 1;        // 預設進階降級
+}
+```
+
+> 補足 `_isMobileDevice` 的盲區——舊 Android 平板、低階筆電也能被正確判定。（已確認目前 0 處使用這兩個 API。）
+
+---
+
+#### CD. 尊重 `prefers-reduced-motion`（無障礙 a11y）
+
+> **難度**：⭐｜**效益**：對動暈 / 前庭敏感使用者友善，也是無障礙基本盤
+
+目前完全沒處理此媒體查詢（已確認 0 匹配）。系統開啟「減少動態」時，關閉自動旋轉、進場推近、波浪入場：
+
+```js
+const _reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (_reduceMotion) {
+    autoRotateBase = autoRotateSpeed = 0;   // 不自動轉
+    // 跳過 AG1 進場動畫，直接設 END perspective
+    // 跳過 cardEnterW 波浪入場動畫
+}
+```
+
+```css
+@media (prefers-reduced-motion: reduce) {
+    .carousel-item, .carousel { transition: none !important; animation: none !important; }
+}
+```
+
+---
+
+#### CE. 分享相簿互動回饋 HUD（視覺 Banner + 觸覺）
+
+> **難度**：⭐⭐｜**效益**：把 AG2 暫停、snap、到底等「狀態變化」可視化，操作更有確定感
+
+AG2 點背景暫停目前**無任何提示**（使用者不確定有沒有點到）。建立統一的瞬時 HUD，同時整合 BK 缺的 `showBanner` 與 BN 的 haptic：
+
+```js
+function flashHUD(text, ms = 1200) {
+    const el = document.getElementById('readonly-hud');
+    el.textContent = text; el.classList.add('show');
+    clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms);
+    navigator.vibrate?.(12); // 觸覺回饋（見 BN）
+}
+// 觸發點：AG2 toggle → flashHUD(isAutoRotating ? '▶ 旋轉中' : '⏸ 已暫停')
+//          snap 吸附 → flashHUD('◉ 已對齊')
+```
+
+---
+
+### 👁️ 第三組：分享相簿觀看體驗延伸
+
+#### CF. 進場 START 值依張數自適應
+
+> **難度**：⭐｜**效益**：小相簿不再「從超遠空蕩蕩推進」，節奏更貼合內容
+
+v9.11 的 AG1 進場 `START` 固定 8000px。8 張小相簿 `R` 小，從 8000px 推近時前半段畫面幾乎空白、顯得拖沓。讓 `START` 也隨 `R` 縮放：
+
+```js
+// 小相簿起點近一點，大相簿才從很遠進場
+const START = Math.min(8000, Math.max(END + 1500, _R * 3.2));
+```
+
+> 與 v9.11 已完成的「動態 END」對稱，讓進場距離**兩端都自適應張數**。
+
+---
+
+#### CG. 唯讀模式「按住快轉」臨時加速瀏覽
+
+> **難度**：⭐⭐｜**效益**：v9.12 讓大相簿變慢利於細看，這裡給「想快速掃完全部」的人一個出口
+
+長按背景 0.4s 進入「快轉」，放開恢復至動態上限：
+
+```js
+let _fastHold;
+scene.addEventListener('pointerdown', () => {
+    _fastHold = setTimeout(() => {
+        autoRotateSpeed *= 5;       // 臨時 5 倍（仍受 BW 後的硬上限保護）
+        flashHUD('»» 快轉中');
+    }, 400);
+});
+scene.addEventListener('pointerup', () => {
+    clearTimeout(_fastHold);
+    _recomputeSpeedCap();           // 放開即還原至動態上限
+});
+```
+
+---
+
+### 📊 本批（v9.14）優先順序速查
+
+| 組 | ID | 建議 | 難度 | 效益 | 建議順位 |
+|---|---|---|---|---|---|
+| 閉環 | BW | 慣性甩動納入動態上限 | ⭐⭐ | ⭐⭐⭐⭐⭐ | 🔥 先做（補最大破口） |
+| 閉環 | BX | resize / 螢幕旋轉重算 | ⭐ | ⭐⭐⭐⭐ | 🔥 先做 |
+| 閉環 | BY | 縮放後重算 | ⭐⭐ | ⭐⭐⭐⭐ | 🔥 先做 |
+| 閉環 | BZ | 多排取最外排半徑 | ⭐⭐ | ⭐⭐⭐ | 📝 次之 |
+| 閉環 | CA | 進場期間鎖拖曳 | ⭐ | ⭐⭐⭐ | 📝 次之 |
+| 效能 | CB | FPS 自適應降級 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 📝 次之 |
+| 效能 | CC | 低端裝置預判 | ⭐⭐ | ⭐⭐⭐⭐ | 📝 次之 |
+| 效能 | CD | prefers-reduced-motion | ⭐ | ⭐⭐⭐ | 📝 易做 |
+| 回饋 | CE | 互動回饋 HUD | ⭐⭐ | ⭐⭐⭐⭐ | 📝 次之 |
+| 體驗 | CF | 進場 START 自適應 | ⭐ | ⭐⭐⭐ | 📝 易做 |
+| 體驗 | CG | 按住快轉 | ⭐⭐ | ⭐⭐⭐ | 💡 選配 |
+
+> 建議實作順序：**BW → BX → BY**（先把 v9.12 系統閉環）→ CD / CF（兩個 ⭐ 易做快速見效）→ CB / CC（效能自適應）→ 其餘依需求。
 
 ---
 
