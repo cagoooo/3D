@@ -2274,6 +2274,27 @@
             .carousel-item, .carousel, .carousel-item-inner { transition: none !important; }
             .entering-wave { animation: none !important; }
         }
+        /* CE：唯讀互動回饋 HUD（瞬時提示） */
+        #readonly-hud {
+            position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px);
+            padding: 10px 20px; border-radius: 999px;
+            background: rgba(15,15,30,.82); color: #fff; font-size: 15px; font-weight: 600;
+            letter-spacing: .5px; pointer-events: none; opacity: 0;
+            transition: opacity .18s ease, transform .18s ease; z-index: 1200;
+            box-shadow: 0 6px 24px rgba(0,0,0,.45);
+        }
+        #readonly-hud.show { opacity: 1; transform: translate(-50%, 0); }
+        /* CG：唯讀「按住快轉」浮動按鈕 */
+        #readonly-fast {
+            position: fixed; right: 16px; bottom: 84px; width: 56px; height: 56px;
+            border-radius: 50%; border: none; cursor: pointer;
+            background: rgba(99,102,241,.92); color: #fff; font-size: 20px; font-weight: 700;
+            box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 1100;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; user-select: none; -webkit-user-select: none;
+            transition: transform .12s ease, background .12s ease;
+        }
+        #readonly-fast:active { transform: scale(.9); background: rgba(129,140,248,1); }
     </style>
 
 </head>
@@ -3023,6 +3044,33 @@
             window.isReadonlyMode = true;
 
             document.body.classList.add('readonly-mode');
+            // ── CG：唯讀「按住快轉」浮動按鈕（v9.12 讓大相簿慢轉利於細看，這裡給快速掃覽的出口）──
+            (function _setupFastBtn() {
+                const btn = document.createElement('button');
+                btn.id = 'readonly-fast'; btn.type = 'button';
+                btn.textContent = '»»'; btn.title = '按住快轉';
+                let _savedBase = null;
+                const startFast = (e) => {
+                    e.preventDefault();
+                    if (_savedBase == null) _savedBase = autoRotateBase;
+                    const cap = _readonlyMaxOmega < Infinity ? _readonlyMaxOmega : 0.25;
+                    const fast = Math.min(2.0, Math.max(0.3, cap * 6)); // 動態上限 6 倍，封頂 2°/幀
+                    autoRotateBase = fast;
+                    autoRotateSpeed = Math.sign(autoRotateSpeed || 1) * fast;
+                    isAutoRotating = true; startAutoRotate();
+                    flashHUD('»» 快轉中', 0);
+                };
+                const endFast = () => {
+                    if (_savedBase != null) { autoRotateBase = _savedBase; _savedBase = null; }
+                    _recomputeSpeedCap(perspective); // 放開即還原至動態上限
+                    hideHUD(); flashHUD('▶ 一般速度', 900);
+                };
+                btn.addEventListener('pointerdown', startFast);
+                btn.addEventListener('pointerup', endFast);
+                btn.addEventListener('pointercancel', endFast);
+                btn.addEventListener('pointerleave', endFast);
+                document.body.appendChild(btn);
+            })();
             shareBar.classList.add('visible');
             shareOwnerName.textContent = '相簿載入中…';
 
@@ -3374,6 +3422,23 @@
             clearTimeout(storageBanner._timer);
             storageBanner._timer = setTimeout(() => storageBanner.classList.remove('show'), 2500);
         }
+
+        // ── CE：唯讀分享相簿瞬時互動回饋 HUD（暫停/繼續、快轉等狀態可視化）+ 觸覺 ──
+        // lazy 建立 #readonly-hud，不依賴初始化時機；ms=0 表示常駐到手動 hideHUD()
+        let _hudEl = null, _hudTimer = null;
+        function flashHUD(text, ms = 1200) {
+            if (!_hudEl) {
+                _hudEl = document.createElement('div');
+                _hudEl.id = 'readonly-hud';
+                document.body.appendChild(_hudEl);
+            }
+            _hudEl.textContent = text;
+            _hudEl.classList.add('show');
+            clearTimeout(_hudTimer);
+            if (ms > 0) _hudTimer = setTimeout(() => _hudEl.classList.remove('show'), ms);
+            try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+        }
+        function hideHUD() { if (_hudEl) { clearTimeout(_hudTimer); _hudEl.classList.remove('show'); } }
 
         // ================================================================
         //  功能G: 圖片壓縮前處理
@@ -4135,6 +4200,7 @@
                         isAutoRotating = !isAutoRotating;
                         if (isAutoRotating) { startAutoRotate(); }
                         else                { stopAutoRotate(); }
+                        flashHUD(isAutoRotating ? '▶ 旋轉中' : '⏸ 已暫停'); // CE：點背景暫停的視覺+觸覺回饋
                     } else if (isAutoRotating) {
                         // 一般模式：點背景只暫停，不恢復（維持原行為）
                         isAutoRotating = false;
