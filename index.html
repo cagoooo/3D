@@ -2694,6 +2694,18 @@
         let autoRotateSpeed = 0.25;        // 現在旋轉速度（動態，正就=右，負就=左）
         let autoRotateBase = 0.25;         // 使用者設定的基準速度（滑桿 + 分享設定同步）
         let numImages = 0, theta = 0, perRowGlobal = 1;
+        // ══ v9.14 模組層級狀態（一次宣告齊全，避免 TDZ：多處前段函式引用）══
+        let _readonlyMaxOmega = Infinity; // 唯讀手機「視覺速度上限(度/幀)」，非唯讀 = Infinity 不限制
+        let _maxRowRadius = 0;            // BZ：多排相簿最外排環形半徑（buildGallery 計算）
+        let _introLocked = false;         // CA：分享相簿進場推近動畫期間，鎖定拖曳干擾
+        // 裝置能力偵測（CC）＋ 無障礙（CD）：一次評估，無副作用
+        const _lowEnd = !!((navigator.deviceMemory && navigator.deviceMemory <= 4)
+                     || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4));
+        const _reduceMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        // CB：FPS 實測動態降級（0=滿配 1=關陰影動畫 2=關粒子+光照每3幀）
+        let _perfTier = _lowEnd ? 1 : 0;
+        let _perfProbeActive = true;       // 啟動期 FPS 採樣旗標，偵測穩定後關閉
+        let _fpsFrames = 0, _fpsT0 = 0;
         let galleryCards = []; // 快取已建立的卡片，供深度暗化使用
         let lbCurrentIndex = 0, lbOpen = false;
 
@@ -2938,33 +2950,49 @@
         // AG1：進入分享相簿時的鏡頭推近動畫（8000 → 動態終點，1.8s easeOutCubic）
         // 終點依相簿張數動態計算：確保前排卡片高度 ≤ 視窗高度 75%，大相簿自動拉遠
         // buildGallery() 仍以 8000px 計算環形半徑；動畫只改 CSS，不重建 DOM。
+        // ── v9.14 BW/BX/BY：動態速度上限「單一真相來源」──
+        // 依「當前視角 perspective」與「最外排環形半徑」反推手機端速度上限，
+        // 供 ① 進場(v9.12/CF) ② resize/旋轉(BX) ③ pinch/wheel 縮放(BY) 三處共用。
+        // R_proj = R × persp/(persp−R)：透視投影後的有效半徑；相簿越大、視角越近 → 視覺越快。
+        function _recomputeSpeedCap(perspOverride) {
+            if (!_isMobileDevice || !window.isReadonlyMode) { _readonlyMaxOmega = Infinity; return; }
+            const R = _maxRowRadius
+                || (layoutCfg.w + 24) * (perRowGlobal || (galleryCards && galleryCards.length) || 1) / (2 * Math.PI);
+            const persp = perspOverride || perspective || layoutCfg.persp || 8000;
+            const Rproj = persp > R ? R * persp / (persp - R) : R * 3;
+            const targetPxPerFrame = window.innerWidth * 0.6 / 60;            // 前排卡片視覺速度 ≤ 螢幕寬 60%/秒
+            // 下限 0.02：防某些 in-app webview 初期 innerWidth=0 時算出 0 → 自轉被鎖死（BX resize 會再修正）
+            const maxOmega = Math.max(0.02, Math.min(0.25, Rproj > 0 ? targetPxPerFrame / (Rproj * Math.PI / 180) : 0.08));
+            _readonlyMaxOmega = maxOmega;
+            // autoRotateBase 只下不上：拉近(persp↓→Rproj↑)即時變慢；拉遠不強迫加速（分享相簿慢轉更舒適）
+            autoRotateBase  = Math.min(autoRotateBase,  maxOmega);
+            autoRotateSpeed = Math.min(Math.abs(autoRotateSpeed), maxOmega) * Math.sign(autoRotateSpeed || 1);
+            const idealTouchSens = 3 / (0.4 * Rproj * Math.PI / 180);          // 1px 手指 ≈ 3px 視覺位移
+            layoutCfg.touchSens = Math.max(0.05, Math.min(layoutCfg.touchSens ?? 0.5, Math.min(0.5, idealTouchSens)));
+        }
+
         function _readonlyZoomInAnimation() {
-            const START = 8000;
             // 動態計算安全終點：前排卡片高 ≤ innerHeight * 0.75
             const _R   = (layoutCfg.w + 24) * (perRowGlobal || galleryCards.length || 1) / (2 * Math.PI);
             const _ratio = 0.75 * window.innerHeight / layoutCfg.h;
             const _safe  = _ratio > 1 ? Math.ceil(_ratio * _R / (_ratio - 1)) : 8000;
             const END    = Math.min(8000, Math.max(3200, _safe));  // 最近 3200，最遠 8000
+            // CF：進場起點也依張數自適應——小相簿不必從超遠(8000)空蕩推進，節奏更貼合內容
+            const START  = Math.min(8000, Math.max(END + 1500, _R * 3.2));
 
-            // ── 手機端動態速度上限：同步立即套用，不依賴 RAF 動畫是否執行 ──
-            // 問題根源：相簿越大，環形半徑 R 越大，同樣角速度視覺上跑得越快。
-            //   43 張相簿：R_proj ≈ 3149px，固定 0.25°/幀 → 前排卡片 780px/秒（2 螢幕寬/秒）
-            // 修正：依 R_proj 反推「讓前排卡片視覺速度 ≤ 螢幕寬 60%/秒」所需角速度（同步）。
-            //   touchSens 同樣反推：令 1px 手指滑動 ≈ 3px 視覺位移（自然手感比例）。
-            if (_isMobileDevice) {
-                const _Rproj = END > _R ? _R * END / (END - _R) : _R * 3;
-                const _targetPxPerFrame = window.innerWidth * 0.6 / 60;
-                const _maxOmegaDeg = Math.min(0.25, _Rproj > 0
-                    ? _targetPxPerFrame / (_Rproj * Math.PI / 180)
-                    : 0.08);
-                autoRotateBase  = Math.min(autoRotateBase,  _maxOmegaDeg);
-                autoRotateSpeed = Math.min(Math.abs(autoRotateSpeed), _maxOmegaDeg)
-                                * Math.sign(autoRotateSpeed || 1);
-                const _idealTouchSens = 3 / (0.4 * _Rproj * Math.PI / 180);
-                layoutCfg.touchSens = Math.max(0.05,
-                    Math.min(layoutCfg.touchSens ?? 0.5, Math.min(0.5, _idealTouchSens)));
+            // 手機端動態速度上限（v9.12 公式，現抽到 _recomputeSpeedCap 共用；此處用 END 視角）
+            _recomputeSpeedCap(END);
+
+            // CD：尊重 prefers-reduced-motion — 跳過推近動畫，直接定位到 END
+            if (_reduceMotion) {
+                perspective = END; layoutCfg.persp = END;
+                scene.style.perspective = END + 'px';
+                return;
             }
 
+            // CA：進場動畫期間鎖定拖曳，避免與 perspective 推近 RAF 互相覆寫造成抖動
+            _introLocked = true;
+            const _introSafety = setTimeout(() => { _introLocked = false; }, 2200); // 保險解鎖（防 RAF 未跑完鎖死）
             const DURATION = 1800;
             const t0 = performance.now();
             (function tick(now) {
@@ -2973,7 +3001,7 @@
                 perspective = Math.round(START + (END - START) * ease);
                 scene.style.perspective = perspective + 'px';
                 if (p < 1) { requestAnimationFrame(tick); }
-                else        { perspective = END; layoutCfg.persp = END; }
+                else        { perspective = END; layoutCfg.persp = END; _introLocked = false; clearTimeout(_introSafety); }
             })(t0);
         }
 
@@ -3711,6 +3739,9 @@
             // 同步更新全域狀態
             theta = 360 / perRow;
             perRowGlobal = perRow;
+            // BZ：記錄最外排環形半徑（cols 最大那排＝滿排 perRow）供動態速度上限取最大半徑
+            { const _c = rowCount > 1 ? perRow : (numImages || perRow);
+              _maxRowRadius = _c <= 1 ? 0 : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / _c))); }
             galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
             if (!_isReadonlyMode) buildThumbStrip(); // readonly 不需縮圖帶，省略 DOM + 50+ 圖片下載
 
@@ -4026,6 +4057,7 @@
         // ================================================================
         function handleDragStart(e) {
             if (lbOpen) return;
+            if (_introLocked) return; // CA：分享相簿進場推近動畫期間，不接受拖曳起手（避免與 RAF 打架）
             // 控制面板內點擊不觸發拖曳（防止按鈕 click 被 3D 穿透截走後又誤啟動拖曳）
             if (e.target && e.target.closest('.control-panel, #layout-drawer, #tag-bar, #bulk-bar')) return;
             // 🔧 LINE WebView 修復：多指觸控(Pinch)時直接忽略，防止 touches[0] 衝突
@@ -4104,13 +4136,28 @@
                     ? Math.sign(totalDx)           // 用總位移方向（穩定）
                     : Math.sign(velocityX || totalDx || 1); // 短距微移用瞬間速度
                 const gestureSpd = Math.abs(velocityX) || 0.5;
-                autoRotateSpeed = gestureDir * Math.max(autoRotateBase, Math.min(1.5, gestureSpd * 0.32));
+                // BW：放手後接手的「持續自轉速度」收斂到動態上限（非唯讀 _readonlyMaxOmega=Infinity → 維持原 1.5）
+                const _spdCap = Math.min(1.5, _readonlyMaxOmega);
+                autoRotateSpeed = gestureDir * Math.max(autoRotateBase, Math.min(_spdCap, gestureSpd * 0.32));
                 window._restartAutoRotate = true; // 讓 applyInertia 結束後接手旋轉
             }
 
+            // BW：唯讀手機端，慣性「甩動初速」也收斂（允許比自轉快 4 倍的甩動手感，但不失控飛天）
+            if (_readonlyMaxOmega < Infinity && _isMobileDevice) {
+                const _fling = _readonlyMaxOmega * 4;
+                velocityX = Math.max(-_fling, Math.min(_fling, velocityX));
+            }
             carousel.style.transition = 'transform 0.1s ease-out';
             applyInertia(); // 恳性自然衰滅
         }
+
+        // ── v9.14 BX：螢幕旋轉 / 視窗縮放後重算速度上限（innerWidth 變 → 目標視覺速度變）──
+        let _resizeCapT, _wheelCapT;
+        window.addEventListener('resize', () => {
+            if (!window.isReadonlyMode || !_isMobileDevice) return;
+            clearTimeout(_resizeCapT);
+            _resizeCapT = setTimeout(_recomputeSpeedCap, 200); // debounce，以當前 perspective 重算
+        }, { passive: true });
 
         // ================================================================
         //  滾輪縮放
@@ -4123,6 +4170,8 @@
             scene.style.perspective = perspective + 'px';
             // 記憶滞輪調後的景深到 layoutCfg
             layoutCfg.persp = perspective;
+            // BY：縮放改變 perspective → R_proj 變 → 重算速度上限（debounce；非手機則 cap=Infinity 無作用）
+            clearTimeout(_wheelCapT); _wheelCapT = setTimeout(() => _recomputeSpeedCap(perspective), 180);
         }, { passive: false });
 
         // ================================================================
@@ -4184,6 +4233,7 @@
                         // 記憶到 layoutCfg，不重建 gallery
                         layoutCfg.persp = Math.round(current);
                         _pinchEaseRaf = null;
+                        _recomputeSpeedCap(perspective); // BY：pinch 縮放結束 → R_proj 變 → 重算速度上限
                         return;
                     }
                     scene.style.perspective = current + 'px';
