@@ -4040,8 +4040,11 @@
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
             const pY = isDragging ? 0 : parallaxY;
-            // ── Cover Flow：容器固定微仰角（不再整體 rotateY），保留視差上下傾斜 ──
-            carousel.style.transform = `rotateX(${(3 + pY * 0.4).toFixed(2)}deg)`;
+            // ── Cover Flow：固定微仰角 + 依視窗高自適應縮放（矮視窗 RWD：避免卡片超出、騰出工具列空間）──
+            const _vh = window.innerHeight || 800;
+            const _chPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-h')) || 380;
+            const _fit = Math.max(0.4, Math.min(1, (_vh - (_isMobileDevice ? 150 : 200)) / _chPx));
+            carousel.style.transform = `rotateX(${(3 + pY * 0.4).toFixed(2)}deg) scale(${_fit.toFixed(3)})`;
 
             // CB：FPS 採樣（啟動期偵測裝置實際算力，穩定後自動停止）
             if (_perfProbeActive) _perfSample();
@@ -5051,7 +5054,10 @@
         // e.preventDefault() 有效，避免同元素混用 passive/non-passive 導致 WebView 崩潰
         document.addEventListener('touchmove', handleDragMove, { passive: false });
         document.addEventListener('touchend', handleDragEnd);
-        window.addEventListener('resize', () => { initParticles(); buildGallery(); });
+        window.addEventListener('resize', () => {
+            document.body.classList.toggle('mobile-device', window.innerWidth <= 768); // 響應視窗寬變化，修桌機/手機誤判
+            initParticles(); buildGallery();
+        });
 
         // ================================================================
         //  階段二：電影院外殼（Cover Flow chrome / dock / 字幕 / 進度條）
@@ -5133,7 +5139,27 @@
           .cin-menu-item{padding:13px 12px;font-size:15px;}
           .cin-mask.on{background:rgba(0,0,0,.45);}
         }
-        @keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}`;
+        @keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+        /* 矮視窗 RWD：壓縮工具列避免重疊 / 被切（寬而扁的視窗、橫向手機） */
+        @media (max-height:620px){
+          body.cinema .cin-lb-top,body.cinema .cin-lb-bot{display:none;}
+          .cin-chrome{top:12px;}
+          .cin-caption{bottom:90px;} .cin-caption .title{font-size:30px;}
+          .cin-dock{bottom:14px;} .cin-scrub{bottom:6px;}
+          body.cinema #thumb-strip{bottom:66px;}
+          body.cinema.thumbs-on .cin-caption{bottom:152px;}
+          body.cinema.thumbs-on .cin-dock{bottom:76px;}
+          body.cinema.thumbs-on .cin-scrub{bottom:60px;}
+        }
+        @media (max-height:440px){
+          .cin-caption{bottom:76px;} .cin-caption .title{font-size:22px;} .cin-caption .sub{display:none;}
+          .cin-dock{bottom:10px;gap:9px;} .cin-rbtn{width:38px;height:38px;} .cin-rbtn.big{width:46px;height:46px;}
+          .cin-scrub{bottom:5px;width:min(70vw,300px);}
+          body.cinema #thumb-strip{bottom:52px;}
+          body.cinema.thumbs-on .cin-caption{display:none;}
+          body.cinema.thumbs-on .cin-dock{bottom:60px;}
+          body.cinema.thumbs-on .cin-scrub{display:none;}
+        }`;
 
         function updateCinemaFront(idx){
             const cap=document.getElementById('cin-caption'); if(!cap) return;
