@@ -292,6 +292,10 @@
         .carousel:active {
             cursor: grabbing;
         }
+        /* Cover Flow：snap 吸附時卡片平滑過渡（拖曳/自動旋轉時無此 class → 即時跟手不延遲） */
+        .carousel.snapping .carousel-item {
+            transition: transform 0.4s cubic-bezier(.2, .8, .2, 1);
+        }
 
         /* ===== 卡片 ===== */
         .carousel-item {
@@ -2724,6 +2728,7 @@
         let _readonlyMaxOmega = Infinity; // 唯讀手機「視覺速度上限(度/幀)」，非唯讀 = Infinity 不限制
         let _maxRowRadius = 0;            // BZ：多排相簿最外排環形半徑（buildGallery 計算）
         let _introLocked = false;         // CA：分享相簿進場推近動畫期間，鎖定拖曳干擾
+        let _cinFront = 0;                // 階段二：電影院外殼目前正面卡索引
         // 裝置能力偵測（CC）＋ 無障礙（CD）：一次評估，無副作用
         const _lowEnd = !!((navigator.deviceMemory && navigator.deviceMemory <= 4)
                      || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4));
@@ -3614,12 +3619,9 @@
             const GAP = 24;
             const ROW_GAP = 30;
 
-            const MAX_R = Math.min(perspective * 0.72, 3600);
-            const maxPerRow = numImages <= 1
-                ? 1
-                : Math.max(3, Math.floor(2 * Math.PI * MAX_R / (cardW + GAP)));
-            const perRow = Math.min(numImages, maxPerRow);
-            const rowCount = Math.ceil(numImages / perRow);
+            // Cover Flow：單排封面流（全部卡片構成一個環，theta = 360/N）
+            const perRow = numImages;
+            const rowCount = 1;
 
             // 分批參數：前 N 張同步建構（首屏可見），其餘分批補建
             const FIRST_BATCH = Math.min(numImages, 12);
@@ -3778,20 +3780,10 @@
                 inner.appendChild(front); inner.appendChild(back);
                 item.appendChild(inner);
 
-                // 3D 位置計算
-                const row = Math.floor(i / perRow);
-                const colInRow = i % perRow;
-                const colsInThisRow = (row < rowCount - 1)
-                    ? perRow
-                    : ((numImages % perRow) || perRow);
-                const thetaInRow = 360 / colsInThisRow;
-                const rInRow = colsInThisRow <= 1
-                    ? 0
-                    : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / colsInThisRow)));
-                const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
-                item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
-                item.dataset.baseAngle = thetaInRow * colInRow;
-                item._baseAngle = thetaInRow * colInRow; // 數字快取，光照迴圈直接讀取，省去每幀 parseFloat
+                // Cover Flow：卡片定位改由 applyTransform 每幀依 offset 動態計算，這裡不設圓柱 transform
+                const thetaInRow = 360 / perRow;             // = theta（360/N）
+                item.dataset.baseAngle = thetaInRow * i;
+                item._baseAngle = thetaInRow * i;            // 供 _loadByAngle 角度優先載圖
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3815,6 +3807,7 @@
             { const _c = rowCount > 1 ? perRow : (numImages || perRow);
               _maxRowRadius = _c <= 1 ? 0 : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / _c))); }
             galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
+            applyTransform(); // Cover Flow：初始定位（圓柱版靠卡片自帶 transform，CF 需主動繪一次）
             if (!_isReadonlyMode) buildThumbStrip(); // readonly 不需縮圖帶，省略 DOM + 50+ 圖片下載
 
             // ── 剩餘張：用 requestIdleCallback 分批補建，不阻塑主線程 ──
@@ -3838,6 +3831,7 @@
                         }
                         carousel.appendChild(batchFrag);
                         galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
+                        applyTransform(); // CF：補建後重繪，新卡片立即取得 Cover Flow 定位
                         _loadByAngle(); // 每批建好立即排序，正面卡片最先入佇列
                         scheduleBatch(end);
                     };
@@ -3911,6 +3905,7 @@
             buildGallery();
             if (isAutoRotating) startAutoRotate();
             isImmersive = true;
+            document.body.classList.add('immersive');   // 電影院：沉浸時隱藏 chrome/字幕/進度條
             immersiveBtn.textContent = '⏏️ 退出';
             immersiveBtn.classList.add('active');
             showBanner('🎥 沉浸模式 — 大螢幕沉浸體驗', false);
@@ -3925,6 +3920,7 @@
             buildGallery();
             if (isAutoRotating) startAutoRotate();
             isImmersive = false;
+            document.body.classList.remove('immersive');
             immersiveBtn.textContent = '🎥 沉浸';
             immersiveBtn.classList.remove('active');
             showBanner('↩ 已退出沉浸模式', false);
@@ -4043,81 +4039,79 @@
 
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
-            const pX = isDragging ? 0 : parallaxX;
             const pY = isDragging ? 0 : parallaxY;
-            carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
+            // ── Cover Flow：容器固定微仰角（不再整體 rotateY），保留視差上下傾斜 ──
+            carousel.style.transform = `rotateX(${(3 + pY * 0.4).toFixed(2)}deg)`;
 
-            // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
-            // 手機版跳幀：光照計算每 2 幀才跑一次，大幅降低每秒 DOM 操作次數
             // CB：FPS 採樣（啟動期偵測裝置實際算力，穩定後自動停止）
             if (_perfProbeActive) _perfSample();
-            // 光照跳幀：手機每 2 幀；偵測為低階(tier≥2)加大到每 3 幀；桌機僅 tier≥1（偵測掉幀後）才開始跳幀
+            // 光照跳幀：手機每 2 幀；偵測為低階(tier≥2)加大到每 3 幀；桌機 tier≥1（偵測掉幀後）才跳幀
             const _skip = _isMobileDevice ? (_perfTier >= 2 ? 3 : 2) : (_perfTier >= 1 ? 2 : 1);
-            if (_skip > 1) {
-                _lightingFrameCounter = (_lightingFrameCounter + 1) % _skip;
-                if (_lightingFrameCounter !== 0) return;
-            }
-            // AZ: lightAngle 光源角度偏移（0=正前方光，90=右側光）
-            const lightOff = layoutCfg.lightAngle || 0;
-            let frontCardEl = null; let frontBright = -1;
-            galleryCards.forEach(card => {
-                // ★ 優化①：直接讀數字屬性，省去每幀 parseFloat(dataset)
-                const base = card._baseAngle !== undefined ? card._baseAngle : parseFloat(card.dataset.baseAngle || 0);
-                const eff = (((base + currentRotationY + lightOff) % 360) + 360) % 360;
-                const rad = eff * Math.PI / 180;
-                const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+            let _skipLight = false;
+            if (_skip > 1) { _lightingFrameCounter = (_lightingFrameCounter + 1) % _skip; _skipLight = _lightingFrameCounter !== 0; }
 
-                // AY: 最亮卡片追蹤（不受跳幀影響，必須每幀都算）
-                if (bright > frontBright) { frontBright = bright; frontCardEl = card; }
+            // ── Cover Flow 幾何（README §5；常數依卡寬衍生）──
+            const cardW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 260;
+            const spread = cardW * 0.74, edge = cardW * 0.6, depth = cardW * 0.5;
+            const ANGLE = _isMobileDevice ? 44 : 48;
+            const SCALE = _isMobileDevice ? 0.82 : 0.84;
+            const VIS   = _lowEnd ? 2.0 : (_isMobileDevice ? 2.4 : 3.6);
+            const N  = galleryCards.length || 1;
+            const TH = theta || (360 / N);
+            const pos = -currentRotationY / TH;          // 圓柱角度 currentRotationY → CF 浮點位置
 
-                // ★ 優化②：亮度差異 < 0.025 時跳過 DOM 寫入
-                // 自動旋轉 0.25°/幀 → 單卡亮度每幀變化約 0.002，絕大多數幀直接跳過
-                const prevBright = card._bright;
-                if (prevBright !== undefined && Math.abs(bright - prevBright) < 0.025) return;
+            let frontCardEl = null, frontDist = 1e9, frontIndex = 0;
+            for (let i = 0; i < galleryCards.length; i++) {
+                const card = galleryCards[i];
+                let a = i - pos; a -= N * Math.round(a / N);   // 環狀最短距離（落在 -N/2 ~ N/2）
+                const aa = Math.abs(a), sgn = Math.sign(a);
+                if (aa > VIS + 0.6) { card.style.opacity = '0'; card.style.pointerEvents = 'none'; continue; }
+                const near = Math.min(aa, 1);
+                const tx = sgn * (near * spread + Math.max(0, aa - 1) * edge);
+                const tz = -aa * depth;
+                const ry = -Math.max(-1.3, Math.min(1.3, a)) * ANGLE;
+                const sc = Math.pow(SCALE, Math.min(aa, 4));
+                const op = aa > VIS ? Math.max(0, (VIS + 0.6 - aa) / 0.6) : aa > 2.6 ? (VIS - aa) / (VIS - 2.6) * 0.5 + 0.5 : 1;
+                const focus = aa < 0.5;
+                card.style.opacity = String(op);
+                card.style.pointerEvents = focus ? 'auto' : 'none';
+                card.style.zIndex = String(1000 - Math.round(aa * 10));
+                card.style.transform = `translateX(${tx.toFixed(1)}px) translateZ(${tz.toFixed(1)}px) rotateY(${ry.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+                // 最靠正面者 = 焦點卡
+                if (aa < frontDist) { frontDist = aa; frontCardEl = card; frontIndex = i; }
+                if (_skipLight) continue;
+                // CF 亮度：正面最亮、兩側依距離漸暗（亮度閾值跳寫，省 DOM）
+                const bright = focus ? 1.08 : Math.max(0.34, 1.02 - aa * 0.3);
+                if (card._bright !== undefined && Math.abs(bright - card._bright) < 0.025) continue;
                 card._bright = bright;
-
-                // ★ 優化③：背向卡片（bright ≤ 0.36）固定暗色，跳過動態陰影計算
-                // 背面始終無陰影，用旗標避免重複寫入相同值
-                if (bright <= 0.36) {
-                    if (!card._isDark) {
-                        card._isDark = true;
-                        card.style.filter = 'brightness(0.3)';
-                        if (!_isMobileDevice) card.style.boxShadow = 'none';
-                    }
-                    return;
-                }
-                card._isDark = false;
-
-                // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
-                // 手機跳過 box-shadow：動態 boxShadow 每幀觸發 GPU repaint，手機代價高
-                const shadowBlur = Math.round(bright * 28);
-                const shadowAlpha = (bright * 0.55).toFixed(2);
-                card.style.filter = `brightness(${bright.toFixed(2)})`;
+                card.style.filter = `brightness(${bright.toFixed(3)})`;
                 if (!_isMobileDevice) {
-                    card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+                    card.style.boxShadow = focus ? '0 46px 96px -24px rgba(0,0,0,.92)' : '0 28px 58px -22px rgba(0,0,0,.72)';
+                    card.style.outline = focus ? '1px solid rgba(240,217,168,.4)' : 'none';
+                    card.style.outlineOffset = '5px';
                 }
-            });
-
-            // ★ 優化④：card-focused 用快取，只操作「變動的那張」，省去 50 次 classList.toggle
+            }
+            // card-focused 用快取，只操作變動的那張
             if (frontCardEl !== _prevFrontCardEl) {
                 if (_prevFrontCardEl) _prevFrontCardEl.classList.remove('card-focused');
                 if (frontCardEl) frontCardEl.classList.add('card-focused');
                 _prevFrontCardEl = frontCardEl;
+                _cinFront = frontIndex;
+                if (typeof updateThumbActive === 'function') updateThumbActive(frontIndex);
+                if (typeof updateCinemaFront === 'function') updateCinemaFront(frontIndex);
             }
         }
         // AY: 慣性停止後自動 Snap 吸附最近卡片
         function snapToNearest() {
             if (!theta || theta <= 0) return;
             const nearest = Math.round(currentRotationY / theta) * theta;
-            carousel.style.transition = 'transform 0.38s cubic-bezier(.2,.8,.2,1)';
+            carousel.classList.add('snapping');   // CF：吸附時卡片 transform 平滑過渡
             currentRotationY = nearest;
             applyTransform();
-            // 吸附完成後移除過渡動畫，並依新角度重排載入佇列
-            // 讓剛轉到正面的卡片圖片排到佇列最前端立即下載
             setTimeout(() => {
-                carousel.style.transition = '';
+                carousel.classList.remove('snapping');
                 _loadByAngle();
-            }, 400);
+            }, 420);
         }
 
         function applyInertia() {
@@ -5060,6 +5054,221 @@
         window.addEventListener('resize', () => { initParticles(); buildGallery(); });
 
         // ================================================================
+        //  階段二：電影院外殼（Cover Flow chrome / dock / 字幕 / 進度條）
+        //  字體 + CSS + DOM + 事件全用 JS 注入；body.cinema 隱藏舊圓柱 UI
+        // ================================================================
+        const CIN_CSS = `
+        body.cinema { background:#000; }
+        body.cinema #particle-canvas,
+        body.cinema #tag-bar,
+        body.cinema #user-area,
+        body.cinema .control-panel { display:none !important; }
+        body.cinema:not(.show-layout) #layout-drawer { display:none !important; }
+        body.cinema.show-layout #layout-drawer { display:block; z-index:45; right:16px; top:80px; transform:none; }
+        body.cinema .scene { z-index:1; }
+        .cin-spotlight{position:fixed;inset:0;z-index:0;transition:background .6s;background:radial-gradient(62% 56% at 50% 41%, var(--cin-tone,#16130d) 0%, rgba(8,7,5,.35) 46%, #000 80%);}
+        .cin-vignette{position:fixed;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 180px 24px rgba(0,0,0,.7);}
+        .cin-grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+        .cin-lb-top,.cin-lb-bot{position:fixed;left:0;right:0;height:28px;background:#000;z-index:30;}
+        .cin-lb-top{top:0;} .cin-lb-bot{bottom:0;}
+        .cin-chrome{position:fixed;top:44px;left:40px;right:40px;z-index:20;display:flex;align-items:center;justify-content:space-between;}
+        .cin-wordmark{font-family:'Noto Serif TC',serif;font-size:22px;font-weight:600;letter-spacing:.04em;color:#fff;}
+        .cin-wordmark span{font-family:'Noto Sans TC',sans-serif;font-size:9.5px;letter-spacing:.42em;margin-left:11px;color:rgba(255,255,255,.4);}
+        .cin-filter{display:flex;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);}
+        .cin-filter .chip{font-size:11.5px;letter-spacing:.1em;padding:5px 16px;border-radius:999px;cursor:pointer;transition:all .2s;color:rgba(255,255,255,.42);white-space:nowrap;}
+        .cin-filter .chip.on{background:rgba(255,255,255,.12);color:#fff;}
+        .cin-avatar{width:30px;height:30px;border-radius:50%;cursor:pointer;background:#222 center/cover;box-shadow:0 0 0 1.5px rgba(255,255,255,.25);}
+        .cin-caption{position:fixed;left:56px;bottom:132px;z-index:20;max-width:540px;transition:bottom .3s;color:#fff;}
+        .cin-caption .meta{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+        .cin-caption .bar{width:26px;height:1.5px;background:var(--cin-accent,#f0d9a8);}
+        .cin-caption .lbl{font-size:10.5px;letter-spacing:.34em;color:var(--cin-accent,#f0d9a8);}
+        .cin-caption .title{font-family:'Noto Serif TC',serif;font-size:42px;font-weight:600;line-height:1.04;text-shadow:0 2px 34px rgba(0,0,0,.7);animation:cinFade .5s ease;}
+        .cin-caption .sub{font-size:12px;letter-spacing:.18em;color:rgba(255,255,255,.5);margin-top:10px;display:flex;gap:16px;}
+        .cin-caption .sub .cam{font-family:'Space Mono',monospace;}
+        @keyframes cinFade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+        .cin-dock{position:fixed;left:50%;bottom:46px;transform:translateX(-50%);z-index:25;display:flex;align-items:center;gap:13px;transition:bottom .3s;}
+        .cin-rbtn{width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s;color:rgba(255,255,255,.85);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);}
+        .cin-rbtn:hover{background:rgba(255,255,255,.13);}
+        .cin-rbtn.on{background:var(--cin-accent,#f0d9a8);color:#0a0a0a;border:none;}
+        .cin-rbtn.big{width:52px;height:52px;background:var(--cin-accent,#f0d9a8);color:#0a0a0a;border:none;box-shadow:0 8px 26px -6px rgba(240,217,168,.5);}
+        .cin-rbtn svg{width:18px;height:18px;} .cin-rbtn.big svg{width:22px;height:22px;}
+        .cin-vsep{width:1px;height:26px;background:rgba(255,255,255,.14);margin:0 3px;}
+        .cin-scrub{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:25;width:320px;transition:bottom .3s;cursor:pointer;padding:7px 0;}
+        .cin-track{height:2px;border-radius:2px;background:rgba(255,255,255,.14);}
+        .cin-fill{height:100%;width:0;border-radius:2px;background:var(--cin-accent,#f0d9a8);transition:width .3s;}
+        .cin-hint{position:fixed;right:44px;bottom:30px;z-index:20;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.28);}
+        body.cinema #thumb-strip{position:fixed;left:0;right:0;bottom:32px;z-index:24;background:transparent;border:none;}
+        body.cinema.thumbs-on .cin-caption{bottom:246px;}
+        body.cinema.thumbs-on .cin-dock{bottom:122px;}
+        body.cinema.thumbs-on .cin-scrub{bottom:102px;}
+        body.cinema.immersive .cin-chrome,body.cinema.immersive .cin-caption,body.cinema.immersive .cin-scrub,body.cinema.immersive .cin-hint{display:none;}
+        @media(max-width:768px){
+          body.cinema .cin-lb-top,body.cinema .cin-lb-bot{display:none;}
+          .cin-chrome{top:calc(env(safe-area-inset-top) + 12px);left:18px;right:18px;}
+          .cin-wordmark{font-size:18px;}
+          .cin-filter{overflow-x:auto;max-width:52vw;scrollbar-width:none;}
+          .cin-filter::-webkit-scrollbar{display:none;}
+          .cin-caption{left:22px;bottom:120px;max-width:78vw;}
+          .cin-caption .title{font-size:26px;}
+          .cin-dock{bottom:calc(env(safe-area-inset-bottom) + 14px);gap:10px;}
+          .cin-rbtn{width:44px;height:44px;} .cin-rbtn.big{width:56px;height:56px;}
+          .cin-scrub{width:min(86vw,360px);bottom:calc(env(safe-area-inset-bottom) + 78px);}
+          .cin-hint{display:none;}
+        }
+        .cin-menu{position:fixed;z-index:40;min-width:200px;padding:6px;background:rgba(16,14,11,.97);border:1px solid rgba(255,255,255,.1);border-radius:14px;box-shadow:0 24px 60px -16px rgba(0,0,0,.85);animation:cinFade .16s ease;}
+        .cin-menu.tools{bottom:110px;left:50%;transform:translateX(-50%);}
+        .cin-menu.account{top:84px;right:40px;}
+        .cin-menu-item{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;cursor:pointer;color:rgba(255,255,255,.82);font-size:13.5px;font-family:'Noto Sans TC',sans-serif;white-space:nowrap;transition:background .12s;}
+        .cin-menu-item:hover{background:rgba(255,255,255,.07);}
+        .cin-menu-item.danger{color:#f08a7a;}
+        .cin-menu-item.danger:hover{background:rgba(240,138,122,.1);}
+        .cin-menu-item svg{width:17px;height:17px;flex-shrink:0;color:inherit;}
+        .cin-menu-item .lbl{flex:1;}
+        .cin-menu-item .dot{width:6px;height:6px;border-radius:50%;background:var(--cin-accent,#f0d9a8);}
+        .cin-menu-sep{height:1px;background:rgba(255,255,255,.08);margin:5px 8px;}
+        .cin-mask{position:fixed;inset:0;z-index:39;display:none;}
+        .cin-mask.on{display:block;}
+        @media(max-width:768px){
+          .cin-menu.tools,.cin-menu.account{left:0;right:0;bottom:0;top:auto;transform:none;border-radius:18px 18px 0 0;min-width:0;padding:10px 14px calc(env(safe-area-inset-bottom) + 14px);animation:sheetUp .26s cubic-bezier(.4,0,.2,1);}
+          .cin-menu-item{padding:13px 12px;font-size:15px;}
+          .cin-mask.on{background:rgba(0,0,0,.45);}
+        }
+        @keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}`;
+
+        function updateCinemaFront(idx){
+            const cap=document.getElementById('cin-caption'); if(!cap) return;
+            const d=filteredData[idx];
+            if(!d){ cap.innerHTML=''; return; }
+            cap.innerHTML='<div class="meta"><div class="bar"></div><div class="lbl">'+(d.tag||'')+' · № '+String(idx+1).padStart(2,'0')+'</div></div>'+
+                '<div class="title">'+(d.title||'')+'</div>'+
+                '<div class="sub"><span>'+(d.date||'')+'</span>'+(d.camera?'<span class="cam">'+d.camera+'</span>':'')+'</div>';
+            const fill=document.getElementById('cin-fill');
+            if(fill) fill.style.width=(((idx+1)/(filteredData.length||1))*100)+'%';
+        }
+        function buildCinFilter(){
+            const bar=document.getElementById('cin-filter'); if(!bar) return;
+            const existing=new Set(allImageData.map(d=>d.tag));
+            bar.innerHTML=TAGS.filter(t=>t==='全部'||existing.has(t))
+                .map(t=>'<div class="chip'+(t===activeTag?' on':'')+'" data-tag="'+t+'">'+t+'</div>').join('');
+        }
+        function cinGoTo(i){
+            if(!theta) return;
+            isAutoRotating=false;
+            if(autoRotateRafId){cancelAnimationFrame(autoRotateRafId);autoRotateRafId=null;}
+            cancelAnimationFrame(animationFrameId); velocityX=0;
+            currentRotationY=-i*theta; snapToNearest();
+            if(window._cinSyncPlay) window._cinSyncPlay();
+        }
+        function cinStep(dir){ if(!theta) return; cinGoTo(Math.round(-currentRotationY/theta)+dir); }
+        function _cinIcon(name){
+            const P={chevL:'M15 6l-6 6 6 6',chevR:'M9 6l6 6-6 6',play:'M7 5l12 7-12 7V5z',pause:'M8 5v14M16 5v14',grid:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',more:'M5 12h.01M12 12h.01M19 12h.01',
+              upload:'M12 16V4m0 0L7 9m5-5l5 5 M4 17v1a3 3 0 003 3h10a3 3 0 003-3v-1',edit:'M4 20h4l10.5-10.5a2 2 0 00-3-3L5 17v3z M13.5 6.5l3 3',tag:'M3 11l8-8 9 9-8 8-9-9V3 M7.5 7.5h.01',layers:'M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5 M3 17l9 5 9-5',sliders:'M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1 M14 4v4M6 10v4M17 16v4',globe:'M12 3a9 9 0 100 18 9 9 0 000-18z M3 12h18 M12 3c2.5 2.7 2.5 15.3 0 18 M12 3c-2.5 2.7-2.5 15.3 0 18',share:'M16 6l-4-4-4 4 M12 2v13 M4 12v6a2 2 0 002 2h12a2 2 0 002-2v-6',user:'M12 12a4 4 0 100-8 4 4 0 000 8z M5 21a7 7 0 0114 0',cloud:'M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9a3.5 3.5 0 01-1 6.9 M12 12v6m0-6l-2.5 2.5M12 12l2.5 2.5',cloudDown:'M7 17a4 4 0 01-.5-7.97A6 6 0 0118 8a3.5 3.5 0 01-1 6.9 M12 11v6m0 0l-2.5-2.5M12 17l2.5-2.5',trash:'M4 7h16 M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2 M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13',logout:'M15 17l5-5-5-5 M20 12H9 M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3'};
+            const d=(P[name]||'').split(' M').map((s,i)=>'<path d="'+(i===0?s:'M'+s)+'"/>').join('');
+            const fill=name==='play'?'currentColor':'none', stroke=name==='play'?'none':'currentColor';
+            return '<svg viewBox="0 0 24 24" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+d+'</svg>';
+        }
+        function initCinemaShell(){
+            const f=document.createElement('link'); f.rel='stylesheet';
+            f.href='https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap';
+            document.head.appendChild(f);
+            const st=document.createElement('style'); st.textContent=CIN_CSS; document.head.appendChild(st);
+            document.documentElement.style.setProperty('--cin-accent','#f0d9a8');
+            document.documentElement.style.setProperty('--cin-tone','#16130d');
+            const shell=document.createElement('div'); shell.id='cinema-shell';
+            shell.innerHTML=
+                '<div class="cin-spotlight"></div><div class="cin-vignette"></div><div class="cin-grain"></div>'+
+                '<div class="cin-lb-top"></div><div class="cin-lb-bot"></div>'+
+                '<div class="cin-chrome"><div class="cin-wordmark">光廊<span>CINEMA</span></div>'+
+                  '<div class="cin-filter" id="cin-filter"></div>'+
+                  '<div class="cin-avatar" id="cin-avatar"></div></div>'+
+                '<div class="cin-caption" id="cin-caption"></div>'+
+                '<div class="cin-dock">'+
+                  '<div class="cin-rbtn" id="cin-prev">'+_cinIcon('chevL')+'</div>'+
+                  '<div class="cin-rbtn big" id="cin-play">'+_cinIcon('pause')+'</div>'+
+                  '<div class="cin-rbtn" id="cin-next">'+_cinIcon('chevR')+'</div>'+
+                  '<div class="cin-vsep"></div>'+
+                  '<div class="cin-rbtn" id="cin-thumbs">'+_cinIcon('grid')+'</div>'+
+                  '<div class="cin-rbtn" id="cin-more">'+_cinIcon('more')+'</div></div>'+
+                '<div class="cin-scrub" id="cin-scrub"><div class="cin-track"><div class="cin-fill" id="cin-fill"></div></div></div>'+
+                '<div class="cin-hint">DRAG · SCROLL · CLICK</div>';
+            document.body.appendChild(shell);
+            document.body.classList.add('cinema');
+
+            buildCinFilter();
+            document.getElementById('cin-filter').addEventListener('click',e=>{
+                const c=e.target.closest('.chip'); if(!c) return;
+                activeTag=c.dataset.tag; buildCinFilter(); buildTagBar(); applyTagFilter();
+            });
+            const playBtn=document.getElementById('cin-play');
+            const syncPlay=()=>{ playBtn.innerHTML=_cinIcon(isAutoRotating?'pause':'play'); };
+            window._cinSyncPlay=syncPlay;
+            playBtn.addEventListener('click',()=>{ isAutoRotating=!isAutoRotating; if(isAutoRotating)startAutoRotate(); else stopAutoRotate(); syncPlay(); });
+            syncPlay();
+            document.getElementById('cin-prev').addEventListener('click',()=>cinStep(-1));
+            document.getElementById('cin-next').addEventListener('click',()=>cinStep(1));
+            const thBtn=document.getElementById('cin-thumbs');
+            thBtn.addEventListener('click',()=>{
+                const ts=document.getElementById('thumb-strip');
+                const on=!ts.classList.contains('visible');
+                ts.classList.toggle('visible',on); thBtn.classList.toggle('on',on);
+                document.body.classList.toggle('thumbs-on',on);
+            });
+            document.getElementById('cin-scrub').addEventListener('click',e=>{
+                const r=e.currentTarget.getBoundingClientRect();
+                cinGoTo(Math.round(((e.clientX-r.left)/r.width)*((filteredData.length||1)-1)));
+            });
+            initCinemaMenus();   // 階段三：工具 / 帳號選單（代理既有功能按鈕）
+
+            updateCinemaFront(_cinFront);
+        }
+
+        // 階段三：工具 / 帳號選單（代理既有功能按鈕，零重寫舊邏輯）
+        function initCinemaMenus(){
+            const byId=(id)=>{ const b=document.getElementById(id); if(b) b.click(); };
+            const toolItems=[
+                {ic:'upload',label:'上傳圖片',act:()=>byId('file-upload')},
+                {sep:1},
+                {ic:'grid',label:'縮圖帶',act:()=>document.getElementById('cin-thumbs').click(),tog:()=>document.getElementById('thumb-strip').classList.contains('visible')},
+                {ic:'edit',label:'編輯排序',act:()=>byId('edit-mode-btn'),tog:()=>editMode},
+                {ic:'tag',label:'標籤管理',act:()=>byId('tag-manage-btn')},
+                {ic:'layers',label:'沉浸模式',act:()=>byId('immersive-btn'),tog:()=>isImmersive},
+                {ic:'sliders',label:'版型設定',act:()=>document.body.classList.toggle('show-layout'),tog:()=>document.body.classList.contains('show-layout')},
+                {sep:1},
+                {ic:'globe',label:'公開相簿',act:()=>byId('public-toggle-btn')},
+                {ic:'share',label:'分享連結',act:()=>byId('share-link-btn')},
+            ];
+            const acctItems=()=> currentUser ? [
+                {ic:'cloud',label:'同步雲端',act:()=>byId('cloud-sync-btn')},
+                {ic:'cloudDown',label:'從雲端還原',act:()=>byId('cloud-restore-btn')},
+                {sep:1},
+                {ic:'trash',label:'全部刪除',danger:1,act:()=>byId('delete-all-btn')},
+                {ic:'logout',label:'登出',act:()=>byId('logout-btn')},
+            ] : [
+                {ic:'user',label:'登入 Google',act:()=>byId('login-btn')},
+            ];
+            const mask=document.createElement('div'); mask.className='cin-mask'; document.body.appendChild(mask);
+            const toolsMenu=document.createElement('div'); toolsMenu.className='cin-menu tools'; toolsMenu.style.display='none'; document.body.appendChild(toolsMenu);
+            const acctMenu=document.createElement('div'); acctMenu.className='cin-menu account'; acctMenu.style.display='none'; document.body.appendChild(acctMenu);
+            function render(menu,items){
+                menu._items=items;
+                menu.innerHTML=items.map(it=> it.sep?'<div class="cin-menu-sep"></div>'
+                    :'<div class="cin-menu-item'+(it.danger?' danger':'')+'" data-k="'+it.label+'">'+_cinIcon(it.ic)+'<span class="lbl">'+it.label+'</span>'+(it.tog&&it.tog()?'<span class="dot"></span>':'')+'</div>').join('');
+            }
+            function closeAll(){ toolsMenu.style.display=acctMenu.style.display='none'; toolsMenu._open=acctMenu._open=false; mask.classList.remove('on'); }
+            function openMenu(menu,items){ closeAll(); render(menu,items); menu.style.display='block'; mask.classList.add('on'); menu._open=true; }
+            mask.addEventListener('click',closeAll);
+            [toolsMenu,acctMenu].forEach(menu=>menu.addEventListener('click',e=>{
+                const el=e.target.closest('.cin-menu-item'); if(!el) return;
+                const found=(menu._items||[]).find(x=>x.label===el.dataset.k);
+                closeAll();
+                if(found&&found.act) found.act();
+                if(window._cinSyncPlay) setTimeout(window._cinSyncPlay,60);
+            }));
+            document.getElementById('cin-more').onclick=(e)=>{ e.stopPropagation(); toolsMenu._open?closeAll():openMenu(toolsMenu,toolItems); };
+            document.getElementById('cin-avatar').onclick=(e)=>{ e.stopPropagation(); acctMenu._open?closeAll():openMenu(acctMenu,acctItems()); };
+        }
+
+        // ================================================================
         //  初始化
         // ================================================================
         const _isReadonlyMode = !!(new URLSearchParams(location.search).get('view'));
@@ -5156,6 +5365,9 @@
         // 頁面載入後開始第一次計時
         panelStartTimer();
         // ──────────────────────────────────────────────────────────────────
+
+        // 階段二：啟用電影院外殼（Cover Flow chrome / dock / 字幕 / 進度條）
+        initCinemaShell();
 
     </script>
 
