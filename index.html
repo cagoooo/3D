@@ -4980,13 +4980,33 @@
         function buildThumbStrip() {
             thumbVirtualTotal = filteredData.length;
             thumbStrip.innerHTML = '';
-            // 設定捲軸容器寬度
+            // BA: 圖片 ≥ 10 張才顯示跳至輸入框
+            if (lvJumpRow) lvJumpRow.style.display = thumbVirtualTotal >= 10 ? '' : 'none';
+
+            // 電影院模式：簡單 flex 橫向捲動（縮圖貼底橫條，不用虛擬絕對定位，
+            // 才不會把 #thumb-strip 改成 inline relative 而破壞 CSS 的 fixed bottom:0）
+            if (document.body.classList.contains('cinema')) {
+                thumbStrip.style.width = '';
+                thumbStrip.style.position = '';
+                filteredData.forEach((data, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'thumb-item'; el.dataset.idx = i;
+                    el.style.cssText = 'position:relative;flex-shrink:0;';
+                    const img = document.createElement('img');
+                    img.src = data.src; img.alt = '';
+                    img.onerror = () => { img.src = `https://picsum.photos/seed/${i}/100/120`; };
+                    const num = document.createElement('div');
+                    num.className = 'thumb-num'; num.textContent = i + 1;
+                    el.appendChild(img); el.appendChild(num);
+                    el.addEventListener('click', () => { if (typeof cinGoTo === 'function') cinGoTo(i); updateThumbActive(i); });
+                    thumbStrip.appendChild(el);
+                });
+                return;
+            }
+            // 圓柱版：虛擬捲動（大量圖片不卡頓）
             thumbStrip.style.width = (thumbVirtualTotal * THUMB_W) + 'px';
             thumbStrip.style.position = 'relative';
             renderThumbRange();
-
-            // BA: 圖片 ≥ 10 張才顯示跳至輸入框
-            if (lvJumpRow) lvJumpRow.style.display = thumbVirtualTotal >= 10 ? '' : 'none';
         }
 
         function renderThumbRange() {
@@ -5103,10 +5123,10 @@
         .cin-track{height:2px;border-radius:2px;background:rgba(255,255,255,.14);}
         .cin-fill{height:100%;width:0;border-radius:2px;background:var(--cin-accent,#f0d9a8);transition:width .3s;}
         .cin-hint{position:fixed;right:44px;bottom:30px;z-index:20;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.28);}
-        body.cinema #thumb-strip{position:fixed;left:0;right:0;bottom:32px;z-index:24;background:transparent;border:none;}
-        body.cinema.thumbs-on .cin-caption{bottom:246px;}
-        body.cinema.thumbs-on .cin-dock{bottom:122px;}
-        body.cinema.thumbs-on .cin-scrub{bottom:102px;}
+        body.cinema #thumb-strip{position:fixed;left:0;right:0;bottom:0;z-index:24;height:76px;}   /* 貼底全寬橫條，dock 排其上方 */
+        body.cinema.thumbs-on .cin-dock{bottom:90px;}
+        body.cinema.thumbs-on .cin-scrub{bottom:130px;}
+        body.cinema.thumbs-on .cin-caption{bottom:162px;}
         body.cinema.immersive .cin-chrome,body.cinema.immersive .cin-caption,body.cinema.immersive .cin-scrub,body.cinema.immersive .cin-hint{display:none;}
         @media(max-width:768px){
           body.cinema .cin-lb-top,body.cinema .cin-lb-bot{display:none;}
@@ -5146,18 +5166,20 @@
           .cin-chrome{top:12px;}
           .cin-caption{bottom:90px;} .cin-caption .title{font-size:30px;}
           .cin-dock{bottom:14px;} .cin-scrub{bottom:6px;}
-          body.cinema #thumb-strip{bottom:66px;}
-          body.cinema.thumbs-on .cin-caption{bottom:152px;}
-          body.cinema.thumbs-on .cin-dock{bottom:76px;}
-          body.cinema.thumbs-on .cin-scrub{bottom:60px;}
+          body.cinema #thumb-strip{height:60px;padding:6px 12px;}
+          body.cinema #thumb-strip .thumb-item{width:36px;height:44px;}
+          body.cinema.thumbs-on .cin-dock{bottom:72px;}
+          body.cinema.thumbs-on .cin-scrub{display:none;}
+          body.cinema.thumbs-on .cin-caption{bottom:140px;}
         }
         @media (max-height:440px){
           .cin-caption{bottom:76px;} .cin-caption .title{font-size:22px;} .cin-caption .sub{display:none;}
           .cin-dock{bottom:10px;gap:9px;} .cin-rbtn{width:38px;height:38px;} .cin-rbtn.big{width:46px;height:46px;}
           .cin-scrub{bottom:5px;width:min(70vw,300px);}
-          body.cinema #thumb-strip{bottom:52px;}
+          body.cinema #thumb-strip{height:48px;padding:5px 10px;}
+          body.cinema #thumb-strip .thumb-item{width:28px;height:34px;}
           body.cinema.thumbs-on .cin-caption{display:none;}
-          body.cinema.thumbs-on .cin-dock{bottom:60px;}
+          body.cinema.thumbs-on .cin-dock{bottom:56px;}
           body.cinema.thumbs-on .cin-scrub{display:none;}
         }`;
 
@@ -5238,6 +5260,13 @@
                 const on=!ts.classList.contains('visible');
                 ts.classList.toggle('visible',on); thBtn.classList.toggle('on',on);
                 document.body.classList.toggle('thumbs-on',on);
+                // 縮圖開啟時把 dock / 進度條推到縮圖帶正上方（inline 最高優先，繞過 media 特異性問題）
+                const dock=document.querySelector('.cin-dock'), scrub=document.querySelector('.cin-scrub'), cap=document.querySelector('.cin-caption');
+                if(on){ const th=ts.offsetHeight||60;
+                    if(dock)dock.style.bottom=(th+12)+'px';
+                    if(scrub)scrub.style.bottom=(th+50)+'px';
+                    if(cap)cap.style.display = window.innerHeight<480 ? 'none' : '';
+                } else { if(dock)dock.style.bottom=''; if(scrub)scrub.style.bottom=''; if(cap)cap.style.display=''; }
             });
             document.getElementById('cin-scrub').addEventListener('click',e=>{
                 const r=e.currentTarget.getBoundingClientRect();
@@ -5246,6 +5275,8 @@
             initCinemaMenus();   // 階段三：工具 / 帳號選單（代理既有功能按鈕）
 
             updateCinemaFront(_cinFront);
+            // body.cinema 此時才加上，初次 buildGallery 的 buildThumbStrip 走了虛擬版（inline relative）→ 重建為電影院 flex 版
+            if (!_isReadonlyMode && typeof buildThumbStrip === 'function') buildThumbStrip();
         }
 
         // 階段三：工具 / 帳號選單（代理既有功能按鈕，零重寫舊邏輯）
