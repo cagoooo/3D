@@ -292,6 +292,10 @@
         .carousel:active {
             cursor: grabbing;
         }
+        /* Cover Flow：snap 吸附時卡片平滑過渡（拖曳/自動旋轉時無此 class → 即時跟手不延遲） */
+        .carousel.snapping .carousel-item {
+            transition: transform 0.4s cubic-bezier(.2, .8, .2, 1);
+        }
 
         /* ===== 卡片 ===== */
         .carousel-item {
@@ -3614,12 +3618,9 @@
             const GAP = 24;
             const ROW_GAP = 30;
 
-            const MAX_R = Math.min(perspective * 0.72, 3600);
-            const maxPerRow = numImages <= 1
-                ? 1
-                : Math.max(3, Math.floor(2 * Math.PI * MAX_R / (cardW + GAP)));
-            const perRow = Math.min(numImages, maxPerRow);
-            const rowCount = Math.ceil(numImages / perRow);
+            // Cover Flow：單排封面流（全部卡片構成一個環，theta = 360/N）
+            const perRow = numImages;
+            const rowCount = 1;
 
             // 分批參數：前 N 張同步建構（首屏可見），其餘分批補建
             const FIRST_BATCH = Math.min(numImages, 12);
@@ -3778,20 +3779,10 @@
                 inner.appendChild(front); inner.appendChild(back);
                 item.appendChild(inner);
 
-                // 3D 位置計算
-                const row = Math.floor(i / perRow);
-                const colInRow = i % perRow;
-                const colsInThisRow = (row < rowCount - 1)
-                    ? perRow
-                    : ((numImages % perRow) || perRow);
-                const thetaInRow = 360 / colsInThisRow;
-                const rInRow = colsInThisRow <= 1
-                    ? 0
-                    : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / colsInThisRow)));
-                const yOff = (row - (rowCount - 1) / 2) * (layoutCfg.h + ROW_GAP);
-                item.style.transform = `rotateY(${thetaInRow * colInRow}deg) translateZ(${rInRow}px) translateY(${yOff}px)`;
-                item.dataset.baseAngle = thetaInRow * colInRow;
-                item._baseAngle = thetaInRow * colInRow; // 數字快取，光照迴圈直接讀取，省去每幀 parseFloat
+                // Cover Flow：卡片定位改由 applyTransform 每幀依 offset 動態計算，這裡不設圓柱 transform
+                const thetaInRow = 360 / perRow;             // = theta（360/N）
+                item.dataset.baseAngle = thetaInRow * i;
+                item._baseAngle = thetaInRow * i;            // 供 _loadByAngle 角度優先載圖
 
                 wrap.addEventListener('click', e => {
                     e.stopPropagation();
@@ -3815,6 +3806,7 @@
             { const _c = rowCount > 1 ? perRow : (numImages || perRow);
               _maxRowRadius = _c <= 1 ? 0 : Math.round((cardW + GAP) / (2 * Math.sin(Math.PI / _c))); }
             galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
+            applyTransform(); // Cover Flow：初始定位（圓柱版靠卡片自帶 transform，CF 需主動繪一次）
             if (!_isReadonlyMode) buildThumbStrip(); // readonly 不需縮圖帶，省略 DOM + 50+ 圖片下載
 
             // ── 剩餘張：用 requestIdleCallback 分批補建，不阻塑主線程 ──
@@ -3838,6 +3830,7 @@
                         }
                         carousel.appendChild(batchFrag);
                         galleryCards = Array.from(carousel.querySelectorAll('.carousel-item'));
+                        applyTransform(); // CF：補建後重繪，新卡片立即取得 Cover Flow 定位
                         _loadByAngle(); // 每批建好立即排序，正面卡片最先入佇列
                         scheduleBatch(end);
                     };
@@ -4043,62 +4036,59 @@
 
         function applyTransform() {
             currentRotationX = Math.max(-40, Math.min(40, currentRotationX));
-            const pX = isDragging ? 0 : parallaxX;
             const pY = isDragging ? 0 : parallaxY;
-            carousel.style.transform = `rotateY(${currentRotationY + pY}deg) rotateX(${currentRotationX + pX}deg)`;
+            // ── Cover Flow：容器固定微仰角（不再整體 rotateY），保留視差上下傾斜 ──
+            carousel.style.transform = `rotateX(${(3 + pY * 0.4).toFixed(2)}deg)`;
 
-            // ── AT 深度暗化 + 陰影動畫：依各卡片面向角動態調整亮度和陰影 ──
-            // 手機版跳幀：光照計算每 2 幀才跑一次，大幅降低每秒 DOM 操作次數
             // CB：FPS 採樣（啟動期偵測裝置實際算力，穩定後自動停止）
             if (_perfProbeActive) _perfSample();
-            // 光照跳幀：手機每 2 幀；偵測為低階(tier≥2)加大到每 3 幀；桌機僅 tier≥1（偵測掉幀後）才開始跳幀
+            // 光照跳幀：手機每 2 幀；偵測為低階(tier≥2)加大到每 3 幀；桌機 tier≥1（偵測掉幀後）才跳幀
             const _skip = _isMobileDevice ? (_perfTier >= 2 ? 3 : 2) : (_perfTier >= 1 ? 2 : 1);
-            if (_skip > 1) {
-                _lightingFrameCounter = (_lightingFrameCounter + 1) % _skip;
-                if (_lightingFrameCounter !== 0) return;
-            }
-            // AZ: lightAngle 光源角度偏移（0=正前方光，90=右側光）
-            const lightOff = layoutCfg.lightAngle || 0;
-            let frontCardEl = null; let frontBright = -1;
-            galleryCards.forEach(card => {
-                // ★ 優化①：直接讀數字屬性，省去每幀 parseFloat(dataset)
-                const base = card._baseAngle !== undefined ? card._baseAngle : parseFloat(card.dataset.baseAngle || 0);
-                const eff = (((base + currentRotationY + lightOff) % 360) + 360) % 360;
-                const rad = eff * Math.PI / 180;
-                const bright = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+            let _skipLight = false;
+            if (_skip > 1) { _lightingFrameCounter = (_lightingFrameCounter + 1) % _skip; _skipLight = _lightingFrameCounter !== 0; }
 
-                // AY: 最亮卡片追蹤（不受跳幀影響，必須每幀都算）
-                if (bright > frontBright) { frontBright = bright; frontCardEl = card; }
+            // ── Cover Flow 幾何（README §5；常數依卡寬衍生）──
+            const cardW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 260;
+            const spread = cardW * 0.74, edge = cardW * 0.6, depth = cardW * 0.5;
+            const ANGLE = _isMobileDevice ? 44 : 48;
+            const SCALE = _isMobileDevice ? 0.82 : 0.84;
+            const VIS   = _lowEnd ? 2.0 : (_isMobileDevice ? 2.4 : 3.6);
+            const N  = galleryCards.length || 1;
+            const TH = theta || (360 / N);
+            const pos = -currentRotationY / TH;          // 圓柱角度 currentRotationY → CF 浮點位置
 
-                // ★ 優化②：亮度差異 < 0.025 時跳過 DOM 寫入
-                // 自動旋轉 0.25°/幀 → 單卡亮度每幀變化約 0.002，絕大多數幀直接跳過
-                const prevBright = card._bright;
-                if (prevBright !== undefined && Math.abs(bright - prevBright) < 0.025) return;
+            let frontCardEl = null, frontDist = 1e9;
+            for (let i = 0; i < galleryCards.length; i++) {
+                const card = galleryCards[i];
+                let a = i - pos; a -= N * Math.round(a / N);   // 環狀最短距離（落在 -N/2 ~ N/2）
+                const aa = Math.abs(a), sgn = Math.sign(a);
+                if (aa > VIS + 0.6) { card.style.opacity = '0'; card.style.pointerEvents = 'none'; continue; }
+                const near = Math.min(aa, 1);
+                const tx = sgn * (near * spread + Math.max(0, aa - 1) * edge);
+                const tz = -aa * depth;
+                const ry = -Math.max(-1.3, Math.min(1.3, a)) * ANGLE;
+                const sc = Math.pow(SCALE, Math.min(aa, 4));
+                const op = aa > VIS ? Math.max(0, (VIS + 0.6 - aa) / 0.6) : aa > 2.6 ? (VIS - aa) / (VIS - 2.6) * 0.5 + 0.5 : 1;
+                const focus = aa < 0.5;
+                card.style.opacity = String(op);
+                card.style.pointerEvents = focus ? 'auto' : 'none';
+                card.style.zIndex = String(1000 - Math.round(aa * 10));
+                card.style.transform = `translateX(${tx.toFixed(1)}px) translateZ(${tz.toFixed(1)}px) rotateY(${ry.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+                // 最靠正面者 = 焦點卡
+                if (aa < frontDist) { frontDist = aa; frontCardEl = card; }
+                if (_skipLight) continue;
+                // CF 亮度：正面最亮、兩側依距離漸暗（亮度閾值跳寫，省 DOM）
+                const bright = focus ? 1.08 : Math.max(0.34, 1.02 - aa * 0.3);
+                if (card._bright !== undefined && Math.abs(bright - card._bright) < 0.025) continue;
                 card._bright = bright;
-
-                // ★ 優化③：背向卡片（bright ≤ 0.36）固定暗色，跳過動態陰影計算
-                // 背面始終無陰影，用旗標避免重複寫入相同值
-                if (bright <= 0.36) {
-                    if (!card._isDark) {
-                        card._isDark = true;
-                        card.style.filter = 'brightness(0.3)';
-                        if (!_isMobileDevice) card.style.boxShadow = 'none';
-                    }
-                    return;
-                }
-                card._isDark = false;
-
-                // AT: 動態陰影（前排陰影深，後排幾乎無陰影）
-                // 手機跳過 box-shadow：動態 boxShadow 每幀觸發 GPU repaint，手機代價高
-                const shadowBlur = Math.round(bright * 28);
-                const shadowAlpha = (bright * 0.55).toFixed(2);
-                card.style.filter = `brightness(${bright.toFixed(2)})`;
+                card.style.filter = `brightness(${bright.toFixed(3)})`;
                 if (!_isMobileDevice) {
-                    card.style.boxShadow = `0 ${shadowBlur}px ${shadowBlur * 2}px rgba(0,0,0,${shadowAlpha})`;
+                    card.style.boxShadow = focus ? '0 46px 96px -24px rgba(0,0,0,.92)' : '0 28px 58px -22px rgba(0,0,0,.72)';
+                    card.style.outline = focus ? '1px solid rgba(240,217,168,.4)' : 'none';
+                    card.style.outlineOffset = '5px';
                 }
-            });
-
-            // ★ 優化④：card-focused 用快取，只操作「變動的那張」，省去 50 次 classList.toggle
+            }
+            // card-focused 用快取，只操作變動的那張
             if (frontCardEl !== _prevFrontCardEl) {
                 if (_prevFrontCardEl) _prevFrontCardEl.classList.remove('card-focused');
                 if (frontCardEl) frontCardEl.classList.add('card-focused');
@@ -4109,15 +4099,13 @@
         function snapToNearest() {
             if (!theta || theta <= 0) return;
             const nearest = Math.round(currentRotationY / theta) * theta;
-            carousel.style.transition = 'transform 0.38s cubic-bezier(.2,.8,.2,1)';
+            carousel.classList.add('snapping');   // CF：吸附時卡片 transform 平滑過渡
             currentRotationY = nearest;
             applyTransform();
-            // 吸附完成後移除過渡動畫，並依新角度重排載入佇列
-            // 讓剛轉到正面的卡片圖片排到佇列最前端立即下載
             setTimeout(() => {
-                carousel.style.transition = '';
+                carousel.classList.remove('snapping');
                 _loadByAngle();
-            }, 400);
+            }, 420);
         }
 
         function applyInertia() {
