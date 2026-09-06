@@ -4,6 +4,8 @@
 
 ![效果預覽](https://images.unsplash.com/photo-1506744626753-edaeb5d4c829?auto=format&fit=crop&w=600&q=80)
 
+🌐 **線上使用：[專屬創意 3D 畫廊](https://cagoooo.github.io/3D/)**
+
 ---
 
 ## ✨ 核心功能
@@ -2054,7 +2056,7 @@ scene.addEventListener('pointerup', () => {
 - Repository：`cagoooo/3D`
 - 可見性：公開
 - 主要技術：HTML、Firebase
-- 線上入口：未在 GitHub repository metadata 設定
+- 線上入口：<https://cagoooo.github.io/3D/>
 
 ### 可以怎麼應用
 
